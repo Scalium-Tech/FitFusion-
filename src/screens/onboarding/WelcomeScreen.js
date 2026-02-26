@@ -24,6 +24,7 @@ const WelcomeScreen = ({ navigation, setIsOnboarded }) => {
 
         setLoading(true);
         try {
+            console.log('[Welcome] Attempting sign in...');
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
                 password,
@@ -32,6 +33,7 @@ const WelcomeScreen = ({ navigation, setIsOnboarded }) => {
             if (error) throw error;
 
             if (data.user) {
+                console.log('[Welcome] Sign in successful');
                 // Fetch existing user data from Supabase to sync local storage
                 const userData = await storageService.getUserData();
                 if (userData) {
@@ -43,6 +45,7 @@ const WelcomeScreen = ({ navigation, setIsOnboarded }) => {
                 }
             }
         } catch (error) {
+            console.error('[Welcome] Login error:', error.message);
             Alert.alert('Login Failed', error.message);
         } finally {
             setLoading(false);
@@ -57,6 +60,7 @@ const WelcomeScreen = ({ navigation, setIsOnboarded }) => {
 
         setLoading(true);
         try {
+            console.log('[Welcome] Attempting sign up...');
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
@@ -70,10 +74,12 @@ const WelcomeScreen = ({ navigation, setIsOnboarded }) => {
             if (error) throw error;
 
             if (data.user) {
+                console.log('[Welcome] Sign up successful, navigating to Onboarding');
                 // Navigate to onboarding with the name pre-filled
                 navigation.navigate('Onboarding', { name: fullName });
             }
         } catch (error) {
+            console.error('[Welcome] Sign up error:', error.message);
             Alert.alert('Sign Up Failed', error.message);
         } finally {
             setLoading(false);

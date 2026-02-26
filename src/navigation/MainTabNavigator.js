@@ -16,6 +16,7 @@ import MealScannerScreen from '../screens/main/MealScannerScreen';
 import ChatScreen from '../screens/main/ChatScreen';
 import DietScreen from '../screens/main/DietScreen';
 import WorkoutScreen from '../screens/main/WorkoutScreen';
+import TrackerScreen from '../screens/main/TrackerScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 const Tab = createBottomTabNavigator();
@@ -33,7 +34,6 @@ const HomeStack = () => {
 };
 
 // Placeholder screens
-const TrackerScreen = () => <View style={styles.placeholder}><Text style={styles.text}>Tracker Screen</Text></View>;
 const ProgressScreen = () => <View style={styles.placeholder}><Text style={styles.text}>Progress Screen</Text></View>;
 
 const MainTabNavigator = () => {

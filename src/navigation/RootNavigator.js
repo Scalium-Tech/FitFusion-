@@ -16,21 +16,27 @@ const RootNavigator = () => {
         // Initial session check
         const checkSession = async () => {
             try {
-                const [sessionResult, onboardedStatus] = await Promise.all([
-                    supabase.auth.getSession(),
-                    storageService.getIsOnboarded()
-                ]);
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                setSession(currentSession);
 
-                setSession(sessionResult.data.session);
-                setIsOnboarded(onboardedStatus);
+                if (currentSession) {
+                    // Check local state first (now user-specific)
+                    const onboardedStatus = await storageService.getIsOnboarded();
 
-                // As a fallback, if we have a session but local onboarded is false, check Supabase
-                if (sessionResult.data.session && !onboardedStatus) {
-                    const userData = await storageService.getUserData();
-                    if (userData) {
+                    if (onboardedStatus) {
                         setIsOnboarded(true);
-                        await storageService.setIsOnboarded(true);
+                    } else {
+                        // verify with Supabase if local says false
+                        const userData = await storageService.getUserData();
+                        if (userData) {
+                            setIsOnboarded(true);
+                            await storageService.setIsOnboarded(true);
+                        } else {
+                            setIsOnboarded(false);
+                        }
                     }
+                } else {
+                    setIsOnboarded(false);
                 }
             } catch (error) {
                 console.error('Session check error:', error);
@@ -44,20 +50,28 @@ const RootNavigator = () => {
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
             setSession(newSession);
+
             if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-                const onboarded = await storageService.getIsOnboarded();
-                if (onboarded) {
-                    setIsOnboarded(true);
-                } else {
-                    const userData = await storageService.getUserData();
-                    if (userData) {
+                if (newSession) {
+                    // Check local state for THIS user
+                    const onboarded = await storageService.getIsOnboarded();
+                    if (onboarded) {
                         setIsOnboarded(true);
-                        await storageService.setIsOnboarded(true);
+                    } else {
+                        // Double check Supabase profile
+                        const userData = await storageService.getUserData();
+                        if (userData) {
+                            setIsOnboarded(true);
+                            await storageService.setIsOnboarded(true);
+                        } else {
+                            setIsOnboarded(false);
+                        }
                     }
                 }
             } else if (event === 'SIGNED_OUT') {
                 setIsOnboarded(false);
-                await storageService.setIsOnboarded(false);
+                // No need to clear local state here as keys are user-specific,
+                // but we could clear the state in storageService if we wanted to be aggressive.
             }
         });
 

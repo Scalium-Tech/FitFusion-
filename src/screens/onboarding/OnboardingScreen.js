@@ -68,8 +68,12 @@ const AIGenerationStep = ({ theme, onComplete }) => {
         return () => clearInterval(interval);
     }, []);
 
+    const hasCompleted = React.useRef(false);
+
     React.useEffect(() => {
-        if (progress === 100 && onComplete) {
+        if (progress === 100 && onComplete && !hasCompleted.current) {
+            hasCompleted.current = true;
+            console.log('[Onboarding] AIGenerationStep progress 100%, triggering onComplete');
             setTimeout(() => onComplete(), 500);
         }
     }, [progress, onComplete]);
@@ -189,11 +193,16 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
         dietBudget: 150,
         allergies: ['gluten'],
         highProteinFocus: true,
-        workoutLocation: 'gym',
-        equipment: ['dumbbells', 'barbell'],
-        preferredDuration: 45,
+        workoutLocation: '',
+        equipment: [],
+        preferredDuration: 0,
     });
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    React.useEffect(() => {
+        console.log(`[Onboarding] Component mounted/updated. Current step: ${step}`);
+    }, [step]);
 
     React.useEffect(() => {
         if (route.params?.name) {
@@ -202,43 +211,63 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
     }, [route.params?.name]);
 
     const nextStep = () => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+        console.log(`[Onboarding] nextStep called for step ${step}`);
+
+        // Helper to reset processing and increment step
+        const proceed = (customStep = null) => {
+            setIsProcessing(false);
+            if (customStep !== null) setStep(customStep);
+            else setStep(prev => prev + 1);
+        };
         if (step === 1 && !userData.name) {
             alert('Please enter your name');
+            setIsProcessing(false);
             return;
         }
         if (step === 2 && !userData.goal) {
             alert('Please select a goal');
+            setIsProcessing(false);
             return;
         }
         if (step === 3 && (!userData.age || !userData.gender || !userData.height || !userData.weight)) {
             alert('Please fill in all body details');
+            setIsProcessing(false);
             return;
         }
         if (step === 4 && !userData.targetWeight) {
             alert('Please specify a target weight or skip');
+            setIsProcessing(false);
             return;
         }
         if (step === 5 && userData.focusAreas.length === 0) {
             alert('Please select at least one focus area');
+            setIsProcessing(false);
             return;
         }
         if (step === 6 && userData.healthConditions.length === 0) {
             alert('Please select a health condition or select "None"');
+            setIsProcessing(false);
             return;
         }
         if (step === 7 && !userData.experience) {
             alert('Please select your activity level');
+            setIsProcessing(false);
             return;
         }
         if (step === 8 && !userData.dietType) {
             alert('Please select your diet type');
+            setIsProcessing(false);
             return;
         }
         if (step === 9 && !userData.workoutLocation) {
             alert('Please select your workout location');
+            setIsProcessing(false);
             return;
         }
         if (step === 10) {
+            console.log('[Onboarding] Starting AI Plan Generation...');
             setIsAnalyzing(true);
             const triggerPlanGeneration = async () => {
                 try {
@@ -250,32 +279,32 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
                     await storageService.saveUserData(userData);
                     await storageService.setIsOnboarded(true);
 
+                    console.log('[Onboarding] Plan generated and saved successfully');
                     setIsAnalyzing(false);
+                    setIsProcessing(false);
                     if (setIsOnboarded) {
                         setIsOnboarded(true);
                     } else {
                         alert('Onboarding Complete! Welcome to FitFusion AI.');
                     }
                 } catch (error) {
-                    console.error('AI Generation Failed:', error);
+                    console.error('[Onboarding] AI Generation Failed:', error);
                     setIsAnalyzing(false);
-                    alert('AI Generation timed out. Please check your internet or API key and try again.');
+                    setIsProcessing(false);
+
+                    const errorMsg = error.message?.includes('timed out')
+                        ? "AI generation took longer than expected. Please check your internet connection and try again."
+                        : (error.message || "Something went wrong while generating your plan. Please try again.");
+
+                    alert(errorMsg);
                 }
             };
 
             triggerPlanGeneration();
             return;
         }
-        if (step === totalSteps) {
-            setIsAnalyzing(true);
-            setTimeout(() => {
-                setIsAnalyzing(false);
-                // In a real app, you'd navigate to the Dashboard here
-                alert('Onboarding Complete! Welcome to FitFusion AI.');
-            }, 3000);
-            return;
-        }
-        setStep(step + 1);
+
+        proceed();
     };
 
     const prevStep = () => {
@@ -514,9 +543,18 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
             <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Age</Text>
-                    <Text style={styles.valueText}>
-                        {userData.age} <Text style={styles.unitText}>Years</Text>
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <TextInput
+                            style={[styles.valueText, { textAlign: 'right', minWidth: 40 }]}
+                            keyboardType="number-pad"
+                            value={userData.age.toString()}
+                            onChangeText={(text) => {
+                                const sanitized = text.replace(/[^0-9]/g, '');
+                                setUserData({ ...userData, age: sanitized === '' ? '' : Number(sanitized) });
+                            }}
+                        />
+                        <Text style={[styles.unitText, { marginLeft: 4 }]}>Years</Text>
+                    </View>
                 </View>
                 <View style={styles.sliderCard}>
                     <Slider
@@ -542,9 +580,20 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Height</Text>
                     <View style={styles.valueHeaderRight}>
-                        <Text style={styles.valueText}>
-                            {Number(userData.height).toFixed(userData.heightUnit === 'cm' ? 0 : 1)} <Text style={styles.unitText}>{userData.heightUnit}</Text>
-                        </Text>
+                        <TextInput
+                            style={[styles.valueText, { textAlign: 'right', minWidth: 60 }]}
+                            keyboardType="decimal-pad"
+                            value={userData.height.toString()}
+                            onChangeText={(text) => {
+                                const sanitized = text.replace(/[^0-9.]/g, '');
+                                if (sanitized === '' || sanitized === '.') {
+                                    setUserData({ ...userData, height: sanitized });
+                                } else {
+                                    setUserData({ ...userData, height: Number(sanitized) });
+                                }
+                            }}
+                        />
+                        <Text style={styles.unitText}>{userData.heightUnit}</Text>
                         <View style={styles.unitToggle}>
                             <TouchableOpacity
                                 style={[styles.unitButton, userData.heightUnit === 'cm' && styles.unitButtonActive]}
@@ -959,7 +1008,10 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
                                     styles.activityCard,
                                     isSelected && styles.activityCardActive
                                 ]}
-                                onPress={() => setUserData({ ...userData, experience: level.id })}
+                                onPress={() => {
+                                    const defaultDays = level.id === 'beginner' ? 3 : level.id === 'intermediate' ? 5 : 6;
+                                    setUserData({ ...userData, experience: level.id, trainingDays: defaultDays });
+                                }}
                             >
                                 <View style={[
                                     styles.activityIconWrapper,
@@ -1293,7 +1345,10 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
             <View style={styles.analyzingContent}>
                 <Activity size={64} color={theme.colors.primary} />
                 <Text style={styles.analyzingTitle}>AI Analysis in Progress</Text>
-                <Text style={styles.analyzingSubtitle}>Crafting your peak physique roadmap...</Text>
+                <Text style={styles.analyzingSubtitle}>
+                    Crafting your peak physique roadmap...{"\n"}
+                    <Text style={{ fontSize: 12, opacity: 0.8 }}>This usually takes about 30-60 seconds.</Text>
+                </Text>
             </View>
         </View>
     );
@@ -1320,10 +1375,11 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
                 </ScrollView>
 
                 <View style={styles.footer}>
-                    {step < 10 && (
+                    {step < 10 && !isAnalyzing && (
                         <TouchableOpacity
-                            style={styles.nextButton}
+                            style={[styles.nextButton, isProcessing && { opacity: 0.7 }]}
                             onPress={nextStep}
+                            disabled={isProcessing}
                         >
                             <Text style={styles.nextButtonText}>Continue</Text>
                             <ArrowRight size={20} color={theme.colors.background} />

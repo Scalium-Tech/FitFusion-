@@ -7,7 +7,8 @@ import {
     TouchableOpacity,
     ScrollView,
     ActivityIndicator,
-    Dimensions
+    Dimensions,
+    Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';

@@ -5,96 +5,115 @@ const genAI = new GoogleGenerativeAI(apiKey);
 
 export const aiService = {
     generateFitnessPlan: async (userData) => {
-        try {
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const MAX_RETRIES = 2;
 
-            const prompt = `
-            Act as an expert AI Fitness Coach. Create a comprehensive, personalized fitness and nutrition plan based on the following user data:
-            
-            User Profile:
-            - Name: ${userData.name}
-            - Goal: ${userData.goal}
-            - Gender: ${userData.gender}
-            - Age: ${userData.age}
-            - Height: ${userData.height} ${userData.heightUnit}
-            - Weight: ${userData.weight} ${userData.weightUnit}
-            - Target Weight: ${userData.targetWeight} ${userData.targetWeightUnit}
-            - Focus Areas: ${userData.focusAreas.join(', ')}
-            - Health Conditions: ${userData.healthConditions.join(', ')}
-            - Activity Level: ${userData.activityLevel}
-            - Experience: ${userData.experience}
-            - Training Days: ${userData.trainingDays} per week
-            - Diet Type: ${userData.dietType}
-            - Diet Budget: $${userData.dietBudget} per day
-            - Allergies: ${userData.allergies.join(', ')}
-            - Workout Location: ${userData.workoutLocation}
-            - Available Equipment: ${userData.equipment.join(', ')}
-            - Preferred Duration: ${userData.preferredDuration} minutes
+        const executeAttempt = async (attempt) => {
+            try {
+                console.log(`[AI Service] Plan generation attempt ${attempt + 1}/${MAX_RETRIES + 1}`);
+                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-            Please provide the output STRICTLY in the following JSON format:
-            {
-                "greeting": "Personalized string greeting mentioning their goal",
-                "workoutPlan": {
-                    "splitName": "e.g., Push/Pull/Legs",
-                    "days": [
-                        {
-                            "day": "Monday",
-                            "focus": "e.g., Chest & Triceps",
-                            "isRestDay": false,
-                            "caloriesBurned": 350,
-                            "exercises": [
-                                { "name": "Bench Press", "sets": 3, "reps": "10-12", "instruction": "Focus on slow eccentrics and full range of motion." }
-                            ]
-                        }
-                    ]
-                },
-                "nutritionPlan": {
-                    "calories": 2500,
-                    "macros": { "protein": 180, "carbs": 250, "fats": 70 },
-                    "advice": "General nutrition tips based on their diet type",
-                    "weeklyPlan": [
-                        {
-                            "day": "Monday",
-                            "meals": [
-                                { 
-                                    "type": "Breakfast", 
-                                    "name": "Meal Name", 
-                                    "calories": 500, 
-                                    "macros": { "p": 30, "c": 60, "f": 15 },
-                                    "recipe": {
-                                        "ingredients": ["1 cup oats", "2 eggs"],
-                                        "instructions": ["Boil water", "Mix ingredients"]
-                                    }
-                                },
-                                { "type": "Lunch", "name": "Meal", "calories": 700, "macros": { "p": 40, "c": 70, "f": 15 }, "recipe": { "ingredients": [], "instructions": [] } },
-                                { "type": "Dinner", "name": "Meal", "calories": 700, "macros": { "p": 40, "c": 70, "f": 15 }, "recipe": { "ingredients": [], "instructions": [] } },
-                                { "type": "Snacks", "name": "Meal", "calories": 400, "macros": { "p": 20, "c": 40, "f": 10 }, "recipe": { "ingredients": [], "instructions": [] } }
-                            ]
-                        }
-                    ]
-                },
-                "aiInsight": "A motivational insight based on their specific profile"
+                const prompt = `
+                Act as an expert AI Fitness Coach. Create a comprehensive, personalized fitness and nutrition plan based on the following user data:
+                
+                User Profile:
+                - Name: ${userData.name}
+                - Goal: ${userData.goal}
+                - Gender: ${userData.gender}
+                - Age: ${userData.age}
+                - Height: ${userData.height} ${userData.heightUnit}
+                - Weight: ${userData.weight} ${userData.weightUnit}
+                - Target Weight: ${userData.targetWeight} ${userData.targetWeightUnit}
+                - Focus Areas: ${userData.focusAreas.join(', ')}
+                - Health Conditions: ${userData.healthConditions.join(', ')}
+                - Activity Level: ${userData.activityLevel}
+                - Experience: ${userData.experience}
+                - Training Days: ${userData.trainingDays} per week
+                - Diet Type: ${userData.dietType}
+                - Diet Budget: $${userData.dietBudget} per day
+                - Allergies: ${userData.allergies.join(', ')}
+                - Workout Location: ${userData.workoutLocation}
+                - Available Equipment: ${userData.equipment.join(', ')}
+                - Preferred Duration: ${userData.preferredDuration} minutes
+
+                Please provide the output STRICTLY in the following JSON format:
+                {
+                    "greeting": "Personalized string greeting mentioning their goal",
+                    "workoutPlan": {
+                        "splitName": "e.g., Push/Pull/Legs",
+                        "days": [
+                            {
+                                "day": "Monday",
+                                "focus": "e.g., Chest & Triceps",
+                                "isRestDay": false,
+                                "caloriesBurned": 350,
+                                "exercises": [
+                                    { "name": "Bench Press", "sets": 3, "reps": "10-12", "instruction": "Focus on slow eccentrics and full range of motion." }
+                                ]
+                            }
+                        ]
+                    },
+                    "nutritionPlan": {
+                        "calories": 2500,
+                        "macros": { "protein": 180, "carbs": 250, "fats": 70 },
+                        "advice": "General nutrition tips based on their diet type",
+                        "weeklyPlan": [
+                            {
+                                "day": "Monday",
+                                "meals": [
+                                    { 
+                                        "type": "Breakfast", 
+                                        "name": "Meal Name", 
+                                        "calories": 500, 
+                                        "macros": { "p": 30, "c": 60, "f": 15 },
+                                        "recipe": {
+                                            "ingredients": ["1 cup oats", "2 eggs"],
+                                            "instructions": ["Boil water", "Mix ingredients"]
+                                        }
+                                    },
+                                    { "type": "Lunch", "name": "Meal", "calories": 700, "macros": { "p": 40, "c": 70, "f": 15 }, "recipe": { "ingredients": [], "instructions": [] } },
+                                    { "type": "Dinner", "name": "Meal", "calories": 700, "macros": { "p": 40, "c": 70, "f": 15 }, "recipe": { "ingredients": [], "instructions": [] } },
+                                    { "type": "Snacks", "name": "Meal", "calories": 400, "macros": { "p": 20, "c": 40, "f": 10 }, "recipe": { "ingredients": [], "instructions": [] } }
+                                ]
+                            }
+                        ]
+                    },
+                    "aiInsight": "A motivational insight based on their specific profile"
+                }
+
+                CRITICAL REQUIREMENTS:
+                1. Generate a COMPLETE 7-day plan (Monday through Sunday) for BOTH the "workoutPlan.days" and "nutritionPlan.weeklyPlan" arrays.
+                2. For "workoutPlan.days", if a day is for rest, set "isRestDay": true but STILL provide a "focus" (e.g., "Active Recovery & Mobility") and a list of 3-4 specific exercises for stretching or light mobility. EVERY day must have a detailed plan.
+                3. For EVERY meal, the "recipe.instructions" MUST be highly detailed and broken down into multiple specific steps (e.g., "Step 1: Prep...", "Step 2: Cook...", "Step 3: Serve..."). 
+                4. Do not use generic one-liners like "Combine ingredients". Provide professional culinary guidance.
+                5. Ensure ingredients include precise measurements (e.g., "150g", "1 tbsp").
+                `;
+
+                const textPromise = (async () => {
+                    const result = await model.generateContent(prompt);
+                    const response = await result.response;
+                    return response.text();
+                })();
+
+                // 90 second timeout for complex generation
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('AI Generation timed out')), 90000)
+                );
+
+                const text = await Promise.race([textPromise, timeoutPromise]);
+
+                // Clean the response in case Gemini adds markdown code blocks
+                const cleanJson = text.replace(/```json|```/g, "").trim();
+                return JSON.parse(cleanJson);
+            } catch (error) {
+                console.error(`Attempt ${attempt + 1} failed:`, error.message);
+                if (attempt < MAX_RETRIES) {
+                    return executeAttempt(attempt + 1);
+                }
+                throw error;
             }
+        };
 
-            CRITICAL REQUIREMENTS:
-            1. Generate a COMPLETE 7-day plan (Monday through Sunday) for BOTH the "workoutPlan.days" and "nutritionPlan.weeklyPlan" arrays.
-            2. For "workoutPlan.days", if a day is for rest, set "isRestDay": true but STILL provide a "focus" (e.g., "Active Recovery & Mobility") and a list of 3-4 specific exercises for stretching or light mobility. EVERY day must have a detailed plan.
-            3. For EVERY meal, the "recipe.instructions" MUST be highly detailed and broken down into multiple specific steps (e.g., "Step 1: Prep...", "Step 2: Cook...", "Step 3: Serve..."). 
-            4. Do not use generic one-liners like "Combine ingredients". Provide professional culinary guidance.
-            5. Ensure ingredients include precise measurements (e.g., "150g", "1 tbsp").
-            `;
-
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
-
-            // Clean the response in case Gemini adds markdown code blocks
-            const cleanJson = text.replace(/```json|```/g, "").trim();
-            return JSON.parse(cleanJson);
-        } catch (error) {
-            console.error('Error generating AI plan:', error);
-            throw error;
-        }
+        return executeAttempt(0);
     },
 
     getChatSession: async (userData, history = []) => {
@@ -166,6 +185,42 @@ export const aiService = {
         } catch (error) {
             console.error('Error analyzing meal image:', error);
             throw error;
+        }
+    },
+
+    getTrackerInsights: async (stats, userData) => {
+        try {
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+            const prompt = `
+            Act as an expert AI Fitness Analyst for the app "FitFusion". 
+            Analyze the following weekly performance data for ${userData.name} and provide a single, punchy, motivational, and highly specific insight.
+
+            User Profile:
+            - Goal: ${userData.goal}
+            - Experience: ${userData.experience}
+
+            Weekly Stats (Last 7 Days):
+            - Workout Completion (%) per day: ${stats.workoutData.join(', ')}
+            - Diet Completion (%) per day: ${stats.dietData.join(', ')}
+            - Daily Calorie Intake (kcal): ${stats.caloriesIntake.join(', ')}
+            - Days Labels: ${stats.labels.join(', ')}
+
+            Guidelines:
+            1. Identify patterns (e.g., "consistent workouts until Wednesday, then a dip").
+            2. Compare effort to their goal ("${userData.goal}").
+            3. Mention a specific day if it stands out.
+            4. Be encouraging but direct if they are falling behind.
+            5. Keep the insight under 35 words.
+            6. Do not include any JSON formatting, just the plain text string.
+            `;
+
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            return response.text().replace(/"/g, '').trim();
+        } catch (error) {
+            console.error('Error getting tracker insights:', error);
+            return "Keep pushing! Every step counts towards your ultimate fitness goal.";
         }
     }
 };
