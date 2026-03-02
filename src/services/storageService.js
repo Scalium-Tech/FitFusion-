@@ -105,6 +105,7 @@ export const storageService = {
                         training_days: parseInt(userData.trainingDays),
                         diet_type: userData.dietType,
                         diet_budget: parseFloat(userData.dietBudget),
+                        region: userData.region,
                         allergies: userData.allergies,
                         workout_location: userData.workoutLocation,
                         available_equipment: userData.equipment,
@@ -162,6 +163,7 @@ export const storageService = {
                         trainingDays: data.training_days,
                         dietType: data.diet_type,
                         dietBudget: data.diet_budget,
+                        region: data.region,
                         workoutLocation: data.workout_location,
                         equipment: data.available_equipment,
                         preferred_duration: data.preferred_duration

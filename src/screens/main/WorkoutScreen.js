@@ -8,9 +8,11 @@ import {
     ActivityIndicator,
     Dimensions,
     Alert,
-    ImageBackground
+    ImageBackground,
+    Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { theme } from '../../theme';
 import {
     Dumbbell,
@@ -35,6 +37,32 @@ const WorkoutScreen = () => {
     const [userData, setUserData] = useState(null);
     const [selectedDay, setSelectedDay] = useState(new Date().toLocaleDateString('en-US', { weekday: 'long' }));
     const [isCompleted, setIsCompleted] = useState(false);
+    const [activeVideoUrl, setActiveVideoUrl] = useState(null);
+
+    // Dictionary matching exact exercise strings to Cloudinary URLs
+    const EXERCISE_VIDEOS = {
+        "Crunches": "https://res.cloudinary.com/dzytmknza/video/upload/v1772107154/Crunches_muplwh.mp4",
+        "Side Planks": "https://res.cloudinary.com/dzytmknza/video/upload/v1772107155/Slide_Plank_nlbpuz.mp4",
+        "Bodyweight Squats": "https://res.cloudinary.com/dzytmknza/video/upload/v1772020779/Cinematic_Squat_Form_Tutorial_Video_wfgf9o.mp4",
+        "Push-ups": "https://res.cloudinary.com/dzytmknza/video/upload/v1772020870/Perfect_Push_Up_Video_Generation_bzjaar.mp4",
+        "Reverse Lunges": "https://res.cloudinary.com/dzytmknza/video/upload/v1772020853/Realistic_Fitness_Animation_Generation_ea1a5s.mp4",
+        "Forward Lunges": "https://res.cloudinary.com/dzytmknza/video/upload/v1772020855/Athlete_Lunge_Instructional_Video_Generated_e2glj1.mp4",
+        "Jump Squats": "https://res.cloudinary.com/dzytmknza/video/upload/v1772255345/Jump_squat_hormrt.mp4",
+        "Burpees": "https://res.cloudinary.com/dzytmknza/video/upload/v1772255345/Burpee_Video_Generation_wpwsto.mp4",
+        "Glute Bridges": "https://res.cloudinary.com/dzytmknza/video/upload/v1772255345/Glute_Bridge_Exercise_Video_Generated_djsmpw.mp4",
+        "Mountain Climbers": "https://res.cloudinary.com/dzytmknza/video/upload/v1772255345/Mountain_Climbers_Video_Generation_nqacca.mp4",
+        "Planks": "https://res.cloudinary.com/dzytmknza/video/upload/v1772020862/Fitness_Model_Forearm_Plank_Video_bhik3a.mp4",
+        "Jumping Jacks": "https://res.cloudinary.com/dzytmknza/video/upload/v1772256673/Jumping_Jacks_Video_Generated_eq5m8k.mp4",
+        "Barbell Bench Press": "https://res.cloudinary.com/dzytmknza/video/upload/v1772256673/Barbell_Bench_Press_iilcq5.mp4",
+        "Dumbbell Bench Press": "https://res.cloudinary.com/dzytmknza/video/upload/v1772256672/Fitness_Model_Dumbbell_Bench_Press_Video_joa1kz.mp4",
+        "Lat Pulldowns": "https://res.cloudinary.com/dzytmknza/video/upload/v1772278467/Lat_Pulldowns_vgrc8v.mp4"
+    };
+
+    // expo-video setup
+    const player = useVideoPlayer(activeVideoUrl, player => {
+        player.loop = true;
+        player.play();
+    });
 
     const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -156,24 +184,31 @@ const WorkoutScreen = () => {
         </View>
     );
 
-    const renderExercise = (exercise, index) => (
-        <View key={index} style={styles.exerciseCard}>
-            <View style={styles.exerciseHeader}>
-                <View style={styles.exerciseInfo}>
-                    <Text style={styles.exerciseName}>{exercise.name}</Text>
-                    <Text style={styles.exerciseSets}>
-                        {exercise.sets} Sets • {exercise.reps} Reps
-                    </Text>
+    const renderExercise = (exercise, index) => {
+        const videoUrl = EXERCISE_VIDEOS[exercise.name];
+
+        return (
+            <View key={index} style={styles.exerciseCard}>
+                <View style={styles.exerciseHeader}>
+                    <View style={styles.exerciseInfo}>
+                        <Text style={styles.exerciseName}>{exercise.name}</Text>
+                        <Text style={styles.exerciseSets}>
+                            {exercise.sets} Sets • {exercise.reps} Reps
+                        </Text>
+                    </View>
+                    <TouchableOpacity
+                        style={[styles.playButton, !videoUrl && styles.playButtonDisabled]}
+                        onPress={() => videoUrl ? setActiveVideoUrl(videoUrl) : Alert.alert('Video Unavailable', 'The video for this exercise is coming soon!')}
+                    >
+                        <Play size={16} color={theme.colors.background} fill={theme.colors.background} />
+                    </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.playButton}>
-                    <Play size={16} color={theme.colors.background} fill={theme.colors.background} />
-                </TouchableOpacity>
+                <View style={styles.instructionContainer}>
+                    <Text style={styles.instructionText}>{exercise.instruction}</Text>
+                </View>
             </View>
-            <View style={styles.instructionContainer}>
-                <Text style={styles.instructionText}>{exercise.instruction}</Text>
-            </View>
-        </View>
-    );
+        );
+    };
 
     if (loading) {
         return (
@@ -292,6 +327,34 @@ const WorkoutScreen = () => {
                 )}
                 <View style={{ height: 100 }} />
             </ScrollView>
+
+            {/* Video Player Modal */}
+            <Modal
+                visible={!!activeVideoUrl}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setActiveVideoUrl(null)}
+            >
+                <View style={styles.modalOverlay}>
+                    <TouchableOpacity
+                        style={styles.modalCloseArea}
+                        onPress={() => setActiveVideoUrl(null)}
+                    />
+                    <View style={styles.videoContainer}>
+                        {activeVideoUrl && (
+                            <VideoView
+                                player={player}
+                                style={styles.videoPlayer}
+                                allowsFullscreen
+                                allowsPictureInPicture
+                            />
+                        )}
+                        <TouchableOpacity style={styles.closeVideoButton} onPress={() => setActiveVideoUrl(null)}>
+                            <Text style={styles.closeVideoText}>Close Video</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -513,6 +576,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    playButtonDisabled: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        opacity: 0.5,
+    },
     instructionContainer: {
         paddingTop: 15,
         borderTopWidth: 1,
@@ -619,6 +686,42 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: theme.colors.text,
         fontWeight: '500',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalCloseArea: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    videoContainer: {
+        width: width * 0.9,
+        height: width * 1.6, // Aspect ratio roughly 16:9 vertical
+        backgroundColor: '#000',
+        borderRadius: 24,
+        overflow: 'hidden',
+        alignItems: 'center',
+    },
+    videoPlayer: {
+        width: '100%',
+        height: '100%',
+    },
+    closeVideoButton: {
+        position: 'absolute',
+        bottom: 20,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    closeVideoText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: 'bold',
     }
 });
 

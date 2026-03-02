@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabaseClient';
 import { storageService } from '../services/storageService';
 import OnboardingNavigator from './OnboardingNavigator';
@@ -13,6 +15,19 @@ const RootNavigator = () => {
     const [session, setSession] = useState(null);
 
     useEffect(() => {
+        // Capture Android camera restart intent IMMEDIATELY before async delays
+        const capturePendingIntent = async () => {
+            try {
+                const result = await ImagePicker.getPendingResultAsync();
+                if (result && result.length > 0 && !result[0].canceled) {
+                    await storageService.savePendingImage(result);
+                }
+            } catch (err) {
+                console.error("Failed to capture pending intent", err);
+            }
+        };
+        capturePendingIntent();
+
         // Initial session check
         const checkSession = async () => {
             try {

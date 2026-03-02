@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet, Platform } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import {
     Home,
     Dumbbell,
     Layout,
     Activity,
-    TrendingUp,
     MessageSquare
 } from 'lucide-react-native';
 import { theme } from '../theme';
@@ -34,7 +34,6 @@ const HomeStack = () => {
 };
 
 // Placeholder screens
-const ProgressScreen = () => <View style={styles.placeholder}><Text style={styles.text}>Progress Screen</Text></View>;
 
 const MainTabNavigator = () => {
     return (
@@ -45,8 +44,8 @@ const MainTabNavigator = () => {
                     backgroundColor: 'rgba(16, 34, 22, 0.95)',
                     borderTopWidth: 1,
                     borderTopColor: 'rgba(19, 236, 91, 0.1)',
-                    height: Platform.OS === 'ios' ? 88 : 70,
-                    paddingBottom: Platform.OS === 'ios' ? 30 : 12,
+                    height: Platform.OS === 'ios' ? 95 : 85, // Increased height to accommodate padding
+                    paddingBottom: Platform.OS === 'ios' ? 35 : 22, // Lifted icons up
                     paddingTop: 12,
                     position: 'absolute',
                     elevation: 0,
@@ -64,7 +63,6 @@ const MainTabNavigator = () => {
                     else if (route.name === 'Workout') IconName = Dumbbell;
                     else if (route.name === 'Diet') IconName = Layout;
                     else if (route.name === 'Tracker') IconName = Activity;
-                    else if (route.name === 'Progress') IconName = TrendingUp;
                     else if (route.name === 'Chat') IconName = MessageSquare;
 
                     return <IconName size={24} color={color} />;
@@ -75,7 +73,6 @@ const MainTabNavigator = () => {
             <Tab.Screen name="Workout" component={WorkoutScreen} />
             <Tab.Screen name="Diet" component={DietScreen} />
             <Tab.Screen name="Tracker" component={TrackerScreen} />
-            <Tab.Screen name="Progress" component={ProgressScreen} />
             <Tab.Screen name="Chat" component={ChatScreen} />
         </Tab.Navigator>
     );

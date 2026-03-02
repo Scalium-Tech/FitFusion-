@@ -148,7 +148,7 @@ const DietScreen = () => {
 
     const renderMeal = (meal) => (
         <TouchableOpacity
-            key={meal.type}
+            key={meal.id || meal.type}
             style={styles.mealCard}
             activeOpacity={0.7}
             onPress={() => handleMealPress(meal)}

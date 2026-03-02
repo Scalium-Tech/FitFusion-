@@ -22,32 +22,55 @@ import {
     Beef,
     Wheat,
     CheckCircle2,
-    RefreshCcw
+    RefreshCcw,
+    X
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as FileSystem from 'expo-file-system';
 import { aiService } from '../../services/aiService';
 import { storageService } from '../../services/storageService';
 
 const { width } = Dimensions.get('window');
 
-const MealScannerScreen = ({ navigation }) => {
+const MealScannerScreen = ({ route, navigation }) => {
     const [image, setImage] = useState(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [result, setResult] = useState(null);
     const [imageKey, setImageKey] = useState(0);
     const [imageError, setImageError] = useState(false);
+    const [isCameraActive, setIsCameraActive] = useState(false);
+    const [permission, requestPermission] = useCameraPermissions();
+    const cameraRef = React.useRef(null);
 
     // Handle results from camera if process was killed (Android)
     useEffect(() => {
         const checkPendingResult = async () => {
             try {
-                const result = await ImagePicker.getPendingResultAsync();
+                // If HomeScreen caught the restart and passed the result, use it. Otherwise check directly.
+                const passedResult = route.params?.pendingImageResult;
+                const result = passedResult || await ImagePicker.getPendingResultAsync();
+
                 if (result && result.length > 0 && !result[0].canceled) {
                     const selectedImage = result[0].assets[0];
                     setImage(selectedImage.uri);
                     setImageKey(prev => prev + 1);
-                    analyzeImage(selectedImage.base64);
+
+                    // Ensure we have base64 data for the AI analysis
+                    let base64Data = selectedImage.base64;
+                    if (!base64Data) {
+                        base64Data = await FileSystem.readAsStringAsync(selectedImage.uri, {
+                            encoding: FileSystem.EncodingType.Base64,
+                        });
+                    }
+
+                    analyzeImage(base64Data);
+
+                    // Clear the parameter so it doesn't re-trigger if navigating away and back
+                    if (passedResult) {
+                        navigation.setParams({ pendingImageResult: null });
+                    }
                 }
             } catch (error) {
                 console.error('Pending Result Error:', error);
@@ -55,31 +78,36 @@ const MealScannerScreen = ({ navigation }) => {
         };
 
         checkPendingResult();
-    }, []);
+    }, [route.params?.pendingImageResult]);
 
     const pickImage = async (useCamera = false) => {
         try {
             setImageError(false);
-            const permissionResult = useCamera
-                ? await ImagePicker.requestCameraPermissionsAsync()
-                : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-            if (permissionResult.granted === false) {
-                Alert.alert('Permission Required', `You need to allow ${useCamera ? 'camera' : 'gallery'} access to scan your meal.`);
+            if (useCamera) {
+                if (!permission) return;
+                if (!permission.granted) {
+                    const req = await requestPermission();
+                    if (!req.granted) {
+                        Alert.alert('Permission Required', 'You need to allow camera access to scan your meal.');
+                        return;
+                    }
+                }
+                setIsCameraActive(true);
                 return;
             }
 
-            const pickerResult = useCamera
-                ? await ImagePicker.launchCameraAsync({
-                    allowsEditing: false,
-                    quality: 0.5,
-                    base64: true,
-                })
-                : await ImagePicker.launchImageLibraryAsync({
-                    allowsEditing: false,
-                    quality: 0.5,
-                    base64: true,
-                });
+            const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (permissionResult.granted === false) {
+                Alert.alert('Permission Required', 'You need to allow gallery access to scan your meal.');
+                return;
+            }
+
+            const pickerResult = await ImagePicker.launchImageLibraryAsync({
+                allowsEditing: false,
+                quality: 0.5,
+                base64: true,
+            });
 
             if (!pickerResult.canceled) {
                 const selectedImage = pickerResult.assets[0];
@@ -90,6 +118,20 @@ const MealScannerScreen = ({ navigation }) => {
         } catch (error) {
             console.error('Error picking image:', error);
             Alert.alert('Error', 'Failed to select image');
+        }
+    };
+
+    const takePicture = async () => {
+        if (!cameraRef.current) return;
+        try {
+            const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5 });
+            setIsCameraActive(false);
+            setImage(photo.uri);
+            setImageKey(prev => prev + 1);
+            analyzeImage(photo.base64);
+        } catch (e) {
+            console.error('Camera capture error', e);
+            Alert.alert('Error', 'Failed to capture photo.');
         }
     };
 
@@ -142,126 +184,170 @@ const MealScannerScreen = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <ChevronLeft size={24} color={theme.colors.text} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>AI Meal Scanner</Text>
-                <View style={{ width: 40 }} />
-            </View>
-
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {!image ? (
-                    <View style={styles.placeholderContainer}>
-                        <View style={styles.scannerCircle}>
-                            <Camera size={48} color={theme.colors.primary} />
-                        </View>
-                        <Text style={styles.placeholderTitle}>What are you eating?</Text>
-                        <Text style={styles.placeholderSubtitle}>Take a photo of your meal for instant nutritional analysis.</Text>
-
-                        <View style={styles.actionButtons}>
-                            <TouchableOpacity
-                                style={[styles.primaryButton, { marginBottom: 12 }]}
-                                onPress={() => pickImage(true)}
-                            >
-                                <Camera size={20} color="#000" style={{ marginRight: 8 }} />
-                                <Text style={styles.primaryButtonText}>Capture Meal</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.secondaryButton}
-                                onPress={() => pickImage(false)}
-                            >
-                                <ImageIcon size={20} color={theme.colors.text} style={{ marginRight: 8 }} />
-                                <Text style={styles.secondaryButtonText}>Pick from Gallery</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                ) : (
-                    <View style={styles.resultsContainer}>
-                        <View style={styles.imagePreviewContainer}>
-                            {imageError ? (
-                                <View style={styles.imageErrorContainer}>
-                                    <ImageIcon size={48} color={theme.colors.textMuted} />
-                                    <Text style={styles.imageErrorText}>Image failed to load</Text>
-                                    <Text style={styles.imageErrorSubtext}>{image}</Text>
-                                </View>
-                            ) : (
-                                <Image
-                                    key={imageKey}
-                                    source={{ uri: image }}
-                                    style={styles.imagePreview}
-                                    resizeMode="cover"
-                                    onError={(e) => {
-                                        console.error('Image load error:', e.nativeEvent.error);
-                                        setImageError(true);
-                                    }}
-                                />
-                            )}
-                            {loading && (
-                                <View style={styles.loadingOverlay}>
-                                    <ActivityIndicator size="large" color={theme.colors.primary} />
-                                    <Text style={styles.loadingText}>Analyzing with Gemini AI...</Text>
-                                </View>
-                            )}
-                        </View>
-
-                        {result && (
-                            <View style={styles.analysisCard}>
-                                <View style={styles.resultHeader}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.mealName}>{result.name}</Text>
-                                        <View style={styles.confidenceRow}>
-                                            <CheckCircle2 size={12} color={theme.colors.primary} />
-                                            <Text style={styles.confidenceText}>
-                                                {Math.round(result.confidence * 100)}% AI Confidence
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <View style={styles.caloriesBadge}>
-                                        <Flame size={16} color="#FF6B6B" />
-                                        <Text style={styles.caloriesValue}>{result.calories} kcal</Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.macrosRow}>
-                                    {renderMacro(Beef, 'Protein', result.protein, '#FFD700')}
-                                    {renderMacro(Wheat, 'Carbs', result.carbs, '#13EC5B')}
-                                    {renderMacro(Flame, 'Fats', result.fats, '#FF4500')}
-                                </View>
-
-                                <View style={styles.descriptionBox}>
-                                    <Zap size={16} color={theme.colors.primary} style={styles.descriptionIcon} />
-                                    <Text style={styles.descriptionText}>{result.description}</Text>
-                                </View>
-
+            {isCameraActive ? (
+                <View style={StyleSheet.absoluteFill}>
+                    <CameraView
+                        style={StyleSheet.absoluteFill}
+                        facing="back"
+                        ref={cameraRef}
+                    >
+                        <SafeAreaView style={styles.cameraOverlay}>
+                            <View style={styles.cameraHeader}>
                                 <TouchableOpacity
-                                    style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-                                    onPress={handleSave}
-                                    disabled={saving}
+                                    style={styles.cameraBackButton}
+                                    onPress={() => setIsCameraActive(false)}
                                 >
-                                    {saving ? (
-                                        <ActivityIndicator color="#000" />
-                                    ) : (
-                                        <Text style={styles.saveButtonText}>Save to Daily Log</Text>
-                                    )}
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.retakeButton}
-                                    onPress={() => setImage(null)}
-                                >
-                                    <RefreshCcw size={16} color={theme.colors.textMuted} style={{ marginRight: 6 }} />
-                                    <Text style={styles.retakeButtonText}>Scan Another</Text>
+                                    <X size={28} color="#FFF" />
                                 </TouchableOpacity>
                             </View>
-                        )}
+                            <View style={styles.shutterContainer}>
+                                <TouchableOpacity
+                                    style={styles.shutterButton}
+                                    onPress={takePicture}
+                                >
+                                    <View style={styles.shutterInner} />
+                                </TouchableOpacity>
+                            </View>
+                        </SafeAreaView>
+                    </CameraView>
+                </View>
+            ) : (
+                <>
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={() => navigation.goBack()}
+                        >
+                            <ChevronLeft size={24} color={theme.colors.text} />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>AI Meal Scanner</Text>
+                        <View style={{ width: 40 }} />
                     </View>
-                )}
-            </ScrollView>
+
+                    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                        {!image ? (
+                            <View style={styles.placeholderContainer}>
+                                <View style={styles.scannerCircle}>
+                                    <Camera size={48} color={theme.colors.primary} />
+                                </View>
+                                <Text style={styles.placeholderTitle}>What are you eating?</Text>
+                                <Text style={styles.placeholderSubtitle}>Take a photo of your meal for instant nutritional analysis.</Text>
+
+                                <View style={styles.actionButtons}>
+                                    <TouchableOpacity
+                                        style={[styles.primaryButton, { marginBottom: 12 }]}
+                                        onPress={() => pickImage(true)}
+                                    >
+                                        <Camera size={20} color="#000" style={{ marginRight: 8 }} />
+                                        <Text style={styles.primaryButtonText}>Capture Meal</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.secondaryButton}
+                                        onPress={() => pickImage(false)}
+                                    >
+                                        <ImageIcon size={20} color={theme.colors.text} style={{ marginRight: 8 }} />
+                                        <Text style={styles.secondaryButtonText}>Pick from Gallery</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : (
+                            <View style={styles.resultsContainer}>
+                                {/* Move image preview Outside of the result check so it shows while loading */}
+                                <View style={styles.imagePreviewContainer}>
+                                    {imageError ? (
+                                        <View style={styles.imageErrorContainer}>
+                                            <ImageIcon size={48} color={theme.colors.textMuted} />
+                                            <Text style={styles.imageErrorText}>Image failed to load</Text>
+                                            <Text style={styles.imageErrorSubtext}>{image}</Text>
+                                        </View>
+                                    ) : (
+                                        <Image
+                                            key={imageKey}
+                                            source={{ uri: image }}
+                                            style={styles.imagePreview}
+                                            resizeMode="cover"
+                                            onError={(e) => {
+                                                console.error('Image load error:', e.nativeEvent.error);
+                                                setImageError(true);
+                                            }}
+                                        />
+                                    )}
+                                    {loading && (
+                                        <View style={styles.loadingOverlay}>
+                                            <ActivityIndicator size="large" color={theme.colors.primary} />
+                                            <Text style={styles.loadingText}>Analyzing with Gemini AI...</Text>
+                                        </View>
+                                    )}
+                                </View>
+
+                                {result && (
+                                    <View style={styles.analysisCard}>
+                                        <View style={styles.resultHeader}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.mealName}>{result.name}</Text>
+                                                <View style={styles.confidenceRow}>
+                                                    <CheckCircle2 size={12} color={theme.colors.primary} />
+                                                    <Text style={styles.confidenceText}>
+                                                        {Math.round(result.confidence * 100)}% AI Confidence
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            <View style={styles.caloriesBadge}>
+                                                <Flame size={16} color="#FF6B6B" />
+                                                <Text style={styles.caloriesValue}>{result.calories} kcal</Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.macrosRow}>
+                                            {renderMacro(Beef, 'Protein', result.protein, '#FFD700')}
+                                            {renderMacro(Wheat, 'Carbs', result.carbs, '#13EC5B')}
+                                            {renderMacro(Flame, 'Fats', result.fats, '#FF4500')}
+                                        </View>
+
+                                        <View style={styles.descriptionBox}>
+                                            <Zap size={16} color={theme.colors.primary} style={styles.descriptionIcon} />
+                                            <Text style={styles.descriptionText}>{result.description}</Text>
+                                        </View>
+
+                                        <TouchableOpacity
+                                            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                                            onPress={handleSave}
+                                            disabled={saving}
+                                        >
+                                            {saving ? (
+                                                <ActivityIndicator color="#000" />
+                                            ) : (
+                                                <Text style={styles.saveButtonText}>Save to Daily Log</Text>
+                                            )}
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={styles.retakeButton}
+                                            onPress={() => setImage(null)}
+                                        >
+                                            <RefreshCcw size={16} color={theme.colors.textMuted} style={{ marginRight: 6 }} />
+                                            <Text style={styles.retakeButtonText}>Scan Another</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                                {/* Show cancel button while loading */}
+                                {loading && (
+                                    <TouchableOpacity
+                                        style={[styles.retakeButton, { marginTop: 20 }]}
+                                        onPress={() => {
+                                            setImage(null);
+                                            setResult(null);
+                                        }}
+                                    >
+                                        <Text style={styles.retakeButtonText}>Cancel Scan</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+                    </ScrollView>
+                </>
+            )}
         </SafeAreaView>
     );
 };
@@ -270,6 +356,44 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
+    },
+    cameraOverlay: {
+        flex: 1,
+        justifyContent: 'space-between',
+        backgroundColor: 'transparent',
+    },
+    cameraHeader: {
+        padding: 20,
+        alignItems: 'flex-start',
+    },
+    cameraBackButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    shutterContainer: {
+        width: '100%',
+        alignItems: 'center',
+        paddingBottom: 40,
+    },
+    shutterButton: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 4,
+        borderColor: '#FFF',
+    },
+    shutterInner: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#FFF',
     },
     header: {
         flexDirection: 'row',
@@ -292,7 +416,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     scrollContent: {
-        paddingBottom: 40,
+        paddingBottom: 100, // Increased to fix cut-off lower buttons
     },
     placeholderContainer: {
         flex: 1,
@@ -371,8 +495,11 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     imagePreview: {
+        flex: 1,
         width: '100%',
         height: '100%',
     },

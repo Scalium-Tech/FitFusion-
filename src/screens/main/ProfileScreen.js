@@ -231,6 +231,7 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingHorizontal: theme.spacing.lg,
+        paddingBottom: 100, // Added padding to clear the bottom tab bar
     },
     heroSection: {
         alignItems: 'center',

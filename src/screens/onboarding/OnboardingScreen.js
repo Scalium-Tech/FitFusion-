@@ -196,6 +196,7 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
         workoutLocation: '',
         equipment: [],
         preferredDuration: 0,
+        region: '',
     });
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -1146,29 +1147,35 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
                     </View>
                 </View>
 
+                {/* Region */}
+                <View style={[styles.budgetSection, { marginBottom: 24 }]}>
+                    <Text style={styles.dietLabel}>REGION</Text>
+                    <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g., India, USA, UK"
+                        placeholderTextColor={theme.colors.textMuted}
+                        value={userData.region}
+                        onChangeText={(text) => setUserData({ ...userData, region: text })}
+                    />
+                    <Text style={styles.budgetText}>HELPS US RECOMMEND LOCAL FOODS</Text>
+                </View>
+
                 {/* Budget */}
                 <View style={styles.budgetSection}>
-                    <Text style={styles.dietLabel}>DAILY FOOD BUDGET</Text>
-                    <View style={styles.budgetRow}>
-                        {budgetOptions.map((amount) => (
-                            <TouchableOpacity
-                                key={amount}
-                                style={[
-                                    styles.budgetOption,
-                                    userData.dietBudget === amount && styles.budgetOptionActive
-                                ]}
-                                onPress={() => setUserData({ ...userData, dietBudget: amount })}
-                            >
-                                <Text style={[
-                                    styles.budgetOptionText,
-                                    userData.dietBudget === amount && styles.budgetOptionTextActive
-                                ]}>
-                                    ₹{amount}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                    <Text style={styles.budgetText}>ESTIMATED COST PER DAY FOR MEALS</Text>
+                    <Text style={styles.dietLabel}>DAILY FOOD BUDGET (₹)</Text>
+                    <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g., 250"
+                        placeholderTextColor={theme.colors.textMuted}
+                        value={userData.dietBudget ? userData.dietBudget.toString() : ''}
+                        onChangeText={(text) => {
+                            // Only allow numeric input
+                            const numericValue = text.replace(/[^0-9]/g, '');
+                            setUserData({ ...userData, dietBudget: numericValue });
+                        }}
+                        keyboardType="numeric"
+                    />
+                    <Text style={styles.budgetText}>ESTIMATED MAXIMUM COST PER DAY FOR MEALS</Text>
                 </View>
 
                 {/* Allergies */}
@@ -1228,6 +1235,7 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
         ];
 
         const equipmentList = [
+            { id: 'none', label: 'None (Bodyweight)' },
             { id: 'dumbbells', label: 'Dumbbells' },
             { id: 'barbell', label: 'Barbell' },
             { id: 'kettlebell', label: 'Kettlebell' },
@@ -1381,7 +1389,7 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
                             onPress={nextStep}
                             disabled={isProcessing}
                         >
-                            <Text style={styles.nextButtonText}>Continue</Text>
+                            <Text style={styles.nextButtonText}>Next</Text>
                             <ArrowRight size={20} color={theme.colors.background} />
                         </TouchableOpacity>
                     )}
@@ -1396,6 +1404,17 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
+    },
+    textInput: {
+        backgroundColor: `${theme.colors.surface}80`,
+        borderWidth: 1,
+        borderColor: `${theme.colors.textMuted}20`,
+        borderRadius: 16,
+        color: theme.colors.text,
+        fontSize: 16,
+        fontWeight: '500',
+        padding: 16,
+        paddingHorizontal: 20,
     },
     header: {
         paddingHorizontal: theme.spacing.lg,

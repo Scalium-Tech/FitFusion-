@@ -8,24 +8,33 @@ import {
     Image,
     ImageBackground,
     Dimensions,
+    Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-    Flame,
-    Dumbbell,
-    Utensils,
-    Plus,
+    Camera,
+    Image as ImageIcon,
+    ChevronLeft,
     ChevronRight,
-    CheckCircle,
     Zap,
+    Scale,
+    Flame,
+    Beef,
+    Wheat,
+    CheckCircle,
+    CheckCircle2,
+    RefreshCcw,
     Trophy,
-    Search,
+    Dumbbell,
     MessageSquare,
-    Lightbulb
+    Utensils,
+    Search,
+    Clock
 } from 'lucide-react-native';
 import { theme } from '../../theme';
 import { storageService } from '../../services/storageService';
 import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 
 const { width } = Dimensions.get('window');
 
@@ -36,17 +45,19 @@ const HomeScreen = ({ navigation }) => {
     const [dietStreak, setDietStreak] = useState(0);
     const [workoutStreak, setWorkoutStreak] = useState(0);
     const [burnedCalories, setBurnedCalories] = useState(0);
-    const [loading, setLoading] = useState(true);
+    const [recentScans, setRecentScans] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     const loadDashboardData = async () => {
         try {
-            const [savedPlan, savedUserData, nutrition, dStreak, wStreak, burned] = await Promise.all([
+            const [savedPlan, savedUserData, nutrition, dStreak, wStreak, burned, dailyLogs] = await Promise.all([
                 storageService.getPlan(),
                 storageService.getUserData(),
                 storageService.getTodaysNutrition(),
                 storageService.getDietStreak(),
                 storageService.getWorkoutStreak(),
-                storageService.getTodaysBurnedCalories()
+                storageService.getTodaysBurnedCalories(),
+                storageService.getDailyLogs()
             ]);
             setPlan(savedPlan);
             setUserData(savedUserData);
@@ -54,10 +65,11 @@ const HomeScreen = ({ navigation }) => {
             setDietStreak(dStreak);
             setWorkoutStreak(wStreak);
             setBurnedCalories(burned);
+            setRecentScans(dailyLogs || []);
         } catch (error) {
             console.error('Error loading dashboard data:', error);
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
     };
 
@@ -66,6 +78,8 @@ const HomeScreen = ({ navigation }) => {
             loadDashboardData();
         }, [])
     );
+
+    // Removed checkCameraRestart: now handled optimally in RootNavigator and MainTabNavigator
 
     // Find today's workout data
     const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
@@ -239,13 +253,6 @@ const HomeScreen = ({ navigation }) => {
                         <Text style={styles.actionText}>Scan Meal</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionItem}>
-                        <View style={[styles.actionIcon, { backgroundColor: 'rgba(255, 68, 68, 0.1)' }]}>
-                            <Plus size={24} color="#FF4444" />
-                        </View>
-                        <Text style={styles.actionText}>Add Workout</Text>
-                    </TouchableOpacity>
-
                     <TouchableOpacity
                         style={styles.actionItem}
                         onPress={() => navigation.navigate('Chat')}
@@ -256,6 +263,51 @@ const HomeScreen = ({ navigation }) => {
                         <Text style={styles.actionText}>AI Chat</Text>
                     </TouchableOpacity>
                 </View>
+
+                {/* Recent AI Scans */}
+                {recentScans && recentScans.length > 0 && (
+                    <View style={styles.scansContainer}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Today's AI Scans</Text>
+                        </View>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.scansScrollContent}
+                        >
+                            {recentScans.map((scan, index) => (
+                                <View key={index} style={styles.scanCard}>
+                                    <View style={styles.scanImageContainer}>
+                                        {scan.image_url ? (
+                                            <Image source={{ uri: scan.image_url }} style={styles.scanImage} />
+                                        ) : (
+                                            <View style={styles.scanIconFallback}>
+                                                <Utensils size={32} color={theme.colors.primary} style={{ opacity: 0.5 }} />
+                                            </View>
+                                        )}
+                                    </View>
+                                    <View style={styles.scanInfo}>
+                                        <Text style={styles.scanName} numberOfLines={1}>{scan.meal_name}</Text>
+                                        {scan.confidence && (
+                                            <View style={styles.confidenceBadge}>
+                                                <CheckCircle2 size={10} color={theme.colors.primary} />
+                                                <Text style={styles.confidenceText}>
+                                                    {scan.confidence > 1 ? scan.confidence : Math.round(scan.confidence * 100)}% Match
+                                                </Text>
+                                            </View>
+                                        )}
+                                        <View style={styles.scanBadge}>
+                                            <Flame size={10} color="#FF4444" fill="#FF4444" />
+                                            <Text style={styles.scanBadgeText}>{scan.calories} kcal</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
+
+                <View style={{ height: Platform.OS === 'ios' ? 120 : 100 }} />
             </ScrollView>
         </SafeAreaView>
     );
@@ -502,6 +554,43 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: theme.colors.text,
         fontWeight: '500',
+    },
+    scanBadge: {
+        backgroundColor: 'rgba(255, 68, 68, 0.1)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        alignSelf: 'flex-start',
+        marginTop: 6,
+    },
+    scanBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    scanInfo: {
+        padding: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    },
+    scanName: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        marginBottom: 4,
+    },
+    confidenceBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    confidenceText: {
+        color: theme.colors.primary,
+        fontSize: 10,
+        fontWeight: '600',
+        letterSpacing: 1,
     },
     aiInsightCard: {
         marginHorizontal: 20,

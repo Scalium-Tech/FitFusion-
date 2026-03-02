@@ -7,6 +7,17 @@ export const aiService = {
     generateFitnessPlan: async (userData) => {
         const MAX_RETRIES = 2;
 
+        const SUPPORTED_EXERCISES = [
+            // Home Upper & Core
+            "Push-ups", "Knee Push-ups", "Planks", "Side Planks", "Crunches", "Bicycle Crunches", "Mountain Climbers",
+            // Home Lower & Cardio
+            "Bodyweight Squats", "Jump Squats", "Forward Lunges", "Reverse Lunges", "Glute Bridges", "Burpees", "High Knees", "Jumping Jacks",
+            // Gym Chest, Back & Shoulders
+            "Barbell Bench Press", "Dumbbell Bench Press", "Incline Dumbbell Press", "Lat Pulldowns", "Seated Cable Rows", "Dumbbell Rows", "Dumbbell Shoulder Press", "Dumbbell Lateral Raises",
+            // Gym Legs & Arms
+            "Barbell Squats", "Goblet Squats", "Deadlifts", "Romanian Deadlifts (RDLs)", "Leg Press", "Leg Extensions", "Hamstring Curls", "Dumbbell Bicep Curls", "Triceps Rope Pushdowns", "Cable Crunches"
+        ];
+
         const executeAttempt = async (attempt) => {
             try {
                 console.log(`[AI Service] Plan generation attempt ${attempt + 1}/${MAX_RETRIES + 1}`);
@@ -29,7 +40,8 @@ export const aiService = {
                 - Experience: ${userData.experience}
                 - Training Days: ${userData.trainingDays} per week
                 - Diet Type: ${userData.dietType}
-                - Diet Budget: $${userData.dietBudget} per day
+                - Diet Budget: ₹${userData.dietBudget} per day (Maximum)
+                - Region: ${userData.region || 'Global'}
                 - Allergies: ${userData.allergies.join(', ')}
                 - Workout Location: ${userData.workoutLocation}
                 - Available Equipment: ${userData.equipment.join(', ')}
@@ -83,9 +95,10 @@ export const aiService = {
                 CRITICAL REQUIREMENTS:
                 1. Generate a COMPLETE 7-day plan (Monday through Sunday) for BOTH the "workoutPlan.days" and "nutritionPlan.weeklyPlan" arrays.
                 2. For "workoutPlan.days", if a day is for rest, set "isRestDay": true but STILL provide a "focus" (e.g., "Active Recovery & Mobility") and a list of 3-4 specific exercises for stretching or light mobility. EVERY day must have a detailed plan.
-                3. For EVERY meal, the "recipe.instructions" MUST be highly detailed and broken down into multiple specific steps (e.g., "Step 1: Prep...", "Step 2: Cook...", "Step 3: Serve..."). 
-                4. Do not use generic one-liners like "Combine ingredients". Provide professional culinary guidance.
-                5. Ensure ingredients include precise measurements (e.g., "150g", "1 tbsp").
+                3. The "nutritionPlan.weeklyPlan" MUST be heavily influenced by the user's Region (${userData.region || 'Global'}), utilizing local ingredients, cuisines, and regional staple foods while strictly adhering to the Diet Budget constraint.
+                4. For EVERY meal, the "recipe.instructions" should be concise but clear (2-3 steps max) to save generation time. Provide precise measurements (e.g., "150g").
+                5. EXERCISE SELECTION: You MUST ONLY select exercises from the exact provided SUPPORTED_EXERCISES list below. Guarantee a 100% exact string match. Do NOT invent, append text, vary, or suggest any exercises outside of this precise list:
+                   [${SUPPORTED_EXERCISES.join(', ')}]
                 `;
 
                 const textPromise = (async () => {
@@ -94,16 +107,31 @@ export const aiService = {
                     return response.text();
                 })();
 
-                // 90 second timeout for complex generation
+                // 150 second timeout for complex generation
                 const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('AI Generation timed out')), 90000)
+                    setTimeout(() => reject(new Error('AI Generation timed out')), 150000)
                 );
 
                 const text = await Promise.race([textPromise, timeoutPromise]);
 
                 // Clean the response in case Gemini adds markdown code blocks
                 const cleanJson = text.replace(/```json|```/g, "").trim();
-                return JSON.parse(cleanJson);
+                const parsedPlan = JSON.parse(cleanJson);
+
+                // Add unique IDs to all meals to prevent React key warnings
+                if (parsedPlan.nutritionPlan && parsedPlan.nutritionPlan.weeklyPlan) {
+                    parsedPlan.nutritionPlan.weeklyPlan = parsedPlan.nutritionPlan.weeklyPlan.map(day => {
+                        return {
+                            ...day,
+                            meals: day.meals.map((meal, index) => ({
+                                ...meal,
+                                id: `${day.day}-${meal.type}-${index}`
+                            }))
+                        };
+                    });
+                }
+
+                return parsedPlan;
             } catch (error) {
                 console.error(`Attempt ${attempt + 1} failed:`, error.message);
                 if (attempt < MAX_RETRIES) {
