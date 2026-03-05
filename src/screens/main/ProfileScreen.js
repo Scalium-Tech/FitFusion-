@@ -26,7 +26,8 @@ import {
     Utensils,
     AlertCircle,
     Clock,
-    LogOut
+    LogOut,
+    Crown
 } from 'lucide-react-native';
 import { storageService } from '../../services/storageService';
 import { supabase } from '../../services/supabaseClient';
@@ -129,7 +130,17 @@ const ProfileScreen = ({ navigation }) => {
                             <User size={12} color={theme.colors.background} />
                         </View>
                     </View>
-                    <Text style={styles.userName}>{userData?.name || 'User'}</Text>
+
+                    <View style={styles.nameRow}>
+                        <Text style={styles.userName}>{userData?.name || 'User'}</Text>
+                        {userData?.is_subscribed && (
+                            <View style={styles.proBadge}>
+                                <Crown size={12} color="#000" />
+                                <Text style={styles.proBadgeText}>PRO</Text>
+                            </View>
+                        )}
+                    </View>
+
                     <Text style={styles.userGoal}>
                         {userData?.goal?.charAt(0).toUpperCase() + userData?.goal?.slice(1)} Journey
                     </Text>
@@ -174,6 +185,12 @@ const ProfileScreen = ({ navigation }) => {
                 <View style={styles.cardList}>
                     {renderCard(Utensils, 'Diet Type', userData?.dietType, '#69DB7C')}
                     {renderCard(AlertCircle, 'Allergies', userData?.allergies?.join(', ') || 'None', '#FF8787')}
+                </View>
+
+                {/* Subscription Details */}
+                {renderSectionHeader('SUBSCRIPTION')}
+                <View style={styles.cardList}>
+                    {renderCard(Crown, 'Current Plan', userData?.is_subscribed ? (userData?.subscription_tier === 'annual' ? 'Annual PRO Plan' : 'Monthly PRO Plan') : 'Free Tier', '#FFD700')}
                 </View>
 
                 {/* Logout Button */}
@@ -262,11 +279,31 @@ const styles = StyleSheet.create({
         borderWidth: 3,
         borderColor: theme.colors.background,
     },
+    nameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 4,
+    },
+    proBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFD700', // Gold color for premium
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 4,
+    },
+    proBadgeText: {
+        color: '#000',
+        fontSize: 10,
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
+    },
     userName: {
         fontSize: 24,
         fontWeight: 'bold',
         color: theme.colors.text,
-        marginBottom: 4,
     },
     userGoal: {
         fontSize: 14,

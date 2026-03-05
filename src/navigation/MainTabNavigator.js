@@ -7,7 +7,9 @@ import {
     Dumbbell,
     Layout,
     Activity,
-    MessageSquare
+    MessageSquare,
+    TrendingUp,
+    Crosshair
 } from 'lucide-react-native';
 import { theme } from '../theme';
 import HomeScreen from '../screens/main/HomeScreen';
@@ -15,6 +17,7 @@ import ProfileScreen from '../screens/main/ProfileScreen';
 import MealScannerScreen from '../screens/main/MealScannerScreen';
 import ChatScreen from '../screens/main/ChatScreen';
 import DietScreen from '../screens/main/DietScreen';
+import WorkoutTrackingScreen from '../screens/main/WorkoutTrackingScreen';
 import WorkoutScreen from '../screens/main/WorkoutScreen';
 import TrackerScreen from '../screens/main/TrackerScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -62,7 +65,8 @@ const MainTabNavigator = () => {
                     if (route.name === 'Home') IconName = Home;
                     else if (route.name === 'Workout') IconName = Dumbbell;
                     else if (route.name === 'Diet') IconName = Layout;
-                    else if (route.name === 'Tracker') IconName = Activity;
+                    else if (route.name === 'Tracking') IconName = Crosshair; // Using Crosshair for live tracking
+                    else if (route.name === 'Tracker') IconName = Activity; // Keep Activity for progress
                     else if (route.name === 'Chat') IconName = MessageSquare;
 
                     return <IconName size={24} color={color} />;
@@ -72,6 +76,7 @@ const MainTabNavigator = () => {
             <Tab.Screen name="Home" component={HomeStack} />
             <Tab.Screen name="Workout" component={WorkoutScreen} />
             <Tab.Screen name="Diet" component={DietScreen} />
+            <Tab.Screen name="Tracking" component={WorkoutTrackingScreen} />
             <Tab.Screen name="Tracker" component={TrackerScreen} />
             <Tab.Screen name="Chat" component={ChatScreen} />
         </Tab.Navigator>

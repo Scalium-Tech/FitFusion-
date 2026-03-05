@@ -110,6 +110,8 @@ export const storageService = {
                         workout_location: userData.workoutLocation,
                         available_equipment: userData.equipment,
                         preferred_duration: parseInt(userData.preferredDuration),
+                        is_subscribed: userData.is_subscribed || false,
+                        subscription_tier: userData.subscription_tier || 'free',
                         updated_at: new Date().toISOString()
                     });
                 if (error) console.error('Supabase Upsert Error:', error);
@@ -166,7 +168,9 @@ export const storageService = {
                         region: data.region,
                         workoutLocation: data.workout_location,
                         equipment: data.available_equipment,
-                        preferred_duration: data.preferred_duration
+                        preferred_duration: data.preferred_duration,
+                        is_subscribed: data.is_subscribed,
+                        subscription_tier: data.subscription_tier
                     };
                 }
             }
@@ -517,6 +521,47 @@ export const storageService = {
             return streak;
         } catch (error) {
             console.error('Error getting workout streak:', error);
+            return 0;
+        }
+    },
+
+    async getBestStreak() {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) return 0;
+
+            const [workoutRes, dietRes] = await Promise.all([
+                supabase.from('workout_completions').select('date').eq('user_id', session.user.id),
+                supabase.from('meal_completions').select('date').eq('user_id', session.user.id)
+            ]);
+
+            const calculateMax = (data) => {
+                if (!data || data.length === 0) return 0;
+                const dates = [...new Set(data.map(item => item.date))].sort();
+                if (dates.length === 0) return 0;
+
+                let max = 1;
+                let current = 1;
+                for (let i = 1; i < dates.length; i++) {
+                    const prevDate = new Date(dates[i - 1]);
+                    const currDate = new Date(dates[i]);
+                    const diffTime = Math.abs(currDate - prevDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays === 1) {
+                        current++;
+                        max = Math.max(max, current);
+                    } else if (diffDays > 1) {
+                        current = 1;
+                    }
+                }
+                return max;
+            };
+
+            const bestWorkout = calculateMax(workoutRes.data);
+            const bestDiet = calculateMax(dietRes.data);
+            return Math.max(bestWorkout, bestDiet);
+        } catch (error) {
+            console.error('Error getting best streak:', error);
             return 0;
         }
     },

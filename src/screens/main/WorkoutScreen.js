@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import {
     View,
     Text,
@@ -23,7 +24,8 @@ import {
     Info,
     CheckCircle2,
     Lock,
-    Play
+    Play,
+    Crosshair
 } from 'lucide-react-native';
 import { storageService } from '../../services/storageService';
 import { aiService } from '../../services/aiService';
@@ -31,6 +33,7 @@ import { aiService } from '../../services/aiService';
 const { width } = Dimensions.get('window');
 
 const WorkoutScreen = () => {
+    const navigation = useNavigation();
     const [plan, setPlan] = useState(null);
     const [loading, setLoading] = useState(true);
     const [regenerating, setRegenerating] = useState(false);
@@ -38,6 +41,32 @@ const WorkoutScreen = () => {
     const [selectedDay, setSelectedDay] = useState(new Date().toLocaleDateString('en-US', { weekday: 'long' }));
     const [isCompleted, setIsCompleted] = useState(false);
     const [activeVideoUrl, setActiveVideoUrl] = useState(null);
+
+    // Maps all 32 AI generated exercise names to their primary biomechanical tracker ID
+    const LIVE_TRACKING_SUPPORTED = {
+        // Squat Variants
+        "Bodyweight Squats": "squat", "Jump Squats": "squat", "Goblet Squats": "squat", "Barbell Squats": "squat", "Leg Press": "squat",
+
+        // Press Variations (Chest & Shoulders)
+        "Push-ups": "press", "Knee Push-ups": "press", "Barbell Bench Press": "press", "Dumbbell Bench Press": "press", "Incline Dumbbell Press": "press", "Dumbbell Shoulder Press": "press",
+
+        // Pull & Row Variations (Back)
+        "Lat Pulldowns": "pull", "Seated Cable Rows": "pull", "Dumbbell Rows": "pull",
+
+        // Hinge Variations (Lower Back & Glutes)
+        "Deadlifts": "hinge", "Romanian Deadlifts (RDLs)": "hinge", "Glute Bridges": "hinge",
+
+        // Static Holds (Core)
+        "Planks": "hold", "Side Planks": "hold",
+
+        // Accessory/Isolation Variations
+        "Dumbbell Bicep Curls": "accessory_arm", "Triceps Rope Pushdowns": "accessory_arm", "Dumbbell Lateral Raises": "accessory_arm",
+        "Leg Extensions": "accessory_leg", "Hamstring Curls": "accessory_leg",
+        "Crunches": "accessory_core", "Cable Crunches": "accessory_core", "Bicycle Crunches": "accessory_core", "Mountain Climbers": "accessory_core",
+
+        // Cardio/Full Body (Mapped to basic tracking for now)
+        "Forward Lunges": "squat", "Reverse Lunges": "squat", "Burpees": "squat", "High Knees": "hold", "Jumping Jacks": "hold"
+    };
 
     // Dictionary matching exact exercise strings to Cloudinary URLs
     const EXERCISE_VIDEOS = {
@@ -55,7 +84,25 @@ const WorkoutScreen = () => {
         "Jumping Jacks": "https://res.cloudinary.com/dzytmknza/video/upload/v1772256673/Jumping_Jacks_Video_Generated_eq5m8k.mp4",
         "Barbell Bench Press": "https://res.cloudinary.com/dzytmknza/video/upload/v1772256673/Barbell_Bench_Press_iilcq5.mp4",
         "Dumbbell Bench Press": "https://res.cloudinary.com/dzytmknza/video/upload/v1772256672/Fitness_Model_Dumbbell_Bench_Press_Video_joa1kz.mp4",
-        "Lat Pulldowns": "https://res.cloudinary.com/dzytmknza/video/upload/v1772278467/Lat_Pulldowns_vgrc8v.mp4"
+        "Lat Pulldowns": "https://res.cloudinary.com/dzytmknza/video/upload/v1772278467/Lat_Pulldowns_vgrc8v.mp4",
+        "Incline Dumbbell Press": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428711/Incline_Dumbbell_Press_spbubi.mp4",
+        "Goblet Squats": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428712/Goblet_Squats_d4fxmh.mp4",
+        "Deadlifts": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428712/Deadlifts_siuqxs.mp4",
+        "Romanian Deadlifts (RDLs)": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428712/Romanian_Deadlifts_zon81g.mp4",
+        "Leg Press": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428712/Leg_press_hseyiw.mp4",
+        "High Knees": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428712/High_Knees_trpq5f.mp4",
+        "Dumbbell Rows": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428713/Dumbbell_Rows_owwb23.mp4",
+        "Dumbbell Lateral Raises": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428713/Dumbbell_Lateral_Raises_sjfelu.mp4",
+        "Dumbbell Shoulder Press": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428714/Dumbbell_Shoulder_Press_jvxfbz.mp4",
+        "Barbell Squats": "https://res.cloudinary.com/dzytmknza/video/upload/v1772428713/Barbell_Squats_kriuko.mp4",
+        "Knee Push-ups": "https://res.cloudinary.com/dzytmknza/video/upload/v1772432511/Knee_Push_Up_ycqpxp.mp4",
+        "Cable Crunches": "https://res.cloudinary.com/dzytmknza/video/upload/v1772432512/Cable_crunch_px5dr3.mp4",
+        "Seated Cable Rows": "https://res.cloudinary.com/dzytmknza/video/upload/v1772432511/Seated_Cable_Row_Video_Generated_frg34j.mp4",
+        "Triceps Rope Pushdowns": "https://res.cloudinary.com/dzytmknza/video/upload/v1772432513/Triceps_Rope_Pushdowns_Video_Generated_tazhvo.mp4",
+        "Dumbbell Bicep Curls": "https://res.cloudinary.com/dzytmknza/video/upload/v1772432511/Dumbbell_Bicep_Curls_nh4q1u.mp4",
+        "Bicycle Crunches": "https://res.cloudinary.com/dzytmknza/video/upload/v1772437610/Bicycle_crunches_estkvj.mp4",
+        "Leg Extensions": "https://res.cloudinary.com/dzytmknza/video/upload/v1772438427/Leg_extension_tmbhdp.mp4",
+        "Hamstring Curls": "https://res.cloudinary.com/dzytmknza/video/upload/v1772438430/Hamstring_curls_ursz0t.mp4"
     };
 
     // expo-video setup
@@ -186,6 +233,7 @@ const WorkoutScreen = () => {
 
     const renderExercise = (exercise, index) => {
         const videoUrl = EXERCISE_VIDEOS[exercise.name];
+        const trackerId = LIVE_TRACKING_SUPPORTED[exercise.name];
 
         return (
             <View key={index} style={styles.exerciseCard}>
@@ -196,12 +244,22 @@ const WorkoutScreen = () => {
                             {exercise.sets} Sets • {exercise.reps} Reps
                         </Text>
                     </View>
-                    <TouchableOpacity
-                        style={[styles.playButton, !videoUrl && styles.playButtonDisabled]}
-                        onPress={() => videoUrl ? setActiveVideoUrl(videoUrl) : Alert.alert('Video Unavailable', 'The video for this exercise is coming soon!')}
-                    >
-                        <Play size={16} color={theme.colors.background} fill={theme.colors.background} />
-                    </TouchableOpacity>
+                    <View style={styles.exerciseActions}>
+                        {trackerId && (
+                            <TouchableOpacity
+                                style={styles.liveTrackButton}
+                                onPress={() => navigation.navigate('Tracking', { autoStartExercise: trackerId })}
+                            >
+                                <Crosshair size={16} color={theme.colors.background} />
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                            style={[styles.playButton, !videoUrl && styles.playButtonDisabled]}
+                            onPress={() => videoUrl ? setActiveVideoUrl(videoUrl) : Alert.alert('Video Unavailable', 'The video for this exercise is coming soon!')}
+                        >
+                            <Play size={16} color={theme.colors.background} fill={theme.colors.background} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
                 <View style={styles.instructionContainer}>
                     <Text style={styles.instructionText}>{exercise.instruction}</Text>
@@ -568,11 +626,24 @@ const styles = StyleSheet.create({
         marginTop: 4,
         fontWeight: '600',
     },
-    playButton: {
+    exerciseActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    liveTrackButton: {
         width: 36,
         height: 36,
         borderRadius: 18,
         backgroundColor: theme.colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    playButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#FFF',
         justifyContent: 'center',
         alignItems: 'center',
     },

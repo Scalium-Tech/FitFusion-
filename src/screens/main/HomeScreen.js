@@ -44,18 +44,20 @@ const HomeScreen = ({ navigation }) => {
     const [todaysNutrition, setTodaysNutrition] = useState({ calories: 0, protein: 0, carbs: 0, fats: 0 });
     const [dietStreak, setDietStreak] = useState(0);
     const [workoutStreak, setWorkoutStreak] = useState(0);
+    const [bestStreak, setBestStreak] = useState(0);
     const [burnedCalories, setBurnedCalories] = useState(0);
     const [recentScans, setRecentScans] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
     const loadDashboardData = async () => {
         try {
-            const [savedPlan, savedUserData, nutrition, dStreak, wStreak, burned, dailyLogs] = await Promise.all([
+            const [savedPlan, savedUserData, nutrition, dStreak, wStreak, bStreak, burned, dailyLogs] = await Promise.all([
                 storageService.getPlan(),
                 storageService.getUserData(),
                 storageService.getTodaysNutrition(),
                 storageService.getDietStreak(),
                 storageService.getWorkoutStreak(),
+                storageService.getBestStreak(),
                 storageService.getTodaysBurnedCalories(),
                 storageService.getDailyLogs()
             ]);
@@ -64,6 +66,7 @@ const HomeScreen = ({ navigation }) => {
             setTodaysNutrition(nutrition);
             setDietStreak(dStreak);
             setWorkoutStreak(wStreak);
+            setBestStreak(bStreak);
             setBurnedCalories(burned);
             setRecentScans(dailyLogs || []);
         } catch (error) {
@@ -91,7 +94,7 @@ const HomeScreen = ({ navigation }) => {
         greeting: plan?.greeting || "Ready for today's challenge?",
         workoutStreak: workoutStreak || 0,
         dietStreak: dietStreak || 0,
-        bestStreak: 0,
+        bestStreak: bestStreak || 0,
         caloriesGoal: plan?.nutritionPlan?.calories || 2400,
         caloriesConsumed: todaysNutrition.calories,
         caloriesBurned: burnedCalories || 0,

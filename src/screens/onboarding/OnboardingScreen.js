@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
 import Svg, { Circle as SvgCircle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { theme } from '../../theme';
+import SubscriptionStep from './components/SubscriptionStep';
 import { aiService } from '../../services/aiService';
 import { storageService } from '../../services/storageService';
 import {
@@ -171,7 +172,7 @@ const AIGenerationStep = ({ theme, onComplete }) => {
 
 const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
     const [step, setStep] = useState(1);
-    const totalSteps = 10;
+    const totalSteps = 11;
     const [userData, setUserData] = useState({
         name: '',
         goal: '',
@@ -268,6 +269,10 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
             return;
         }
         if (step === 10) {
+            proceed();
+            return;
+        }
+        if (step === 11) {
             console.log('[Onboarding] Starting AI Plan Generation...');
             setIsAnalyzing(true);
             const triggerPlanGeneration = async () => {
@@ -313,6 +318,20 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
             setStep(step - 1);
         } else {
             navigation.goBack();
+        }
+    };
+
+    const handleSubscriptionComplete = async (success, selectedSubscriptionPlan) => {
+        if (!success) {
+            setUserData(prev => ({ ...prev, is_subscribed: false, subscription_tier: 'free' }));
+            setStep(11);
+        } else {
+            setUserData(prev => ({
+                ...prev,
+                is_subscribed: true,
+                subscription_tier: selectedSubscriptionPlan
+            }));
+            setStep(11);
         }
     };
 
@@ -1379,11 +1398,12 @@ const OnboardingScreen = ({ navigation, route, setIsOnboarded }) => {
                     {step === 7 && renderActivityLevelStep()}
                     {step === 8 && renderDietPreferenceStep()}
                     {step === 9 && renderWorkoutPreferenceStep()}
-                    {step === 10 && <AIGenerationStep theme={theme} onComplete={nextStep} />}
+                    {step === 10 && <SubscriptionStep onNext={handleSubscriptionComplete} navigation={navigation} />}
+                    {step === 11 && <AIGenerationStep theme={theme} onComplete={nextStep} />}
                 </ScrollView>
 
                 <View style={styles.footer}>
-                    {step < 10 && !isAnalyzing && (
+                    {step < 11 && !isAnalyzing && step !== 10 && (
                         <TouchableOpacity
                             style={[styles.nextButton, isProcessing && { opacity: 0.7 }]}
                             onPress={nextStep}
