@@ -248,7 +248,17 @@ const WorkoutScreen = () => {
                         {trackerId && (
                             <TouchableOpacity
                                 style={styles.liveTrackButton}
-                                onPress={() => navigation.navigate('Tracking', { autoStartExercise: trackerId })}
+                                onPress={() => {
+                                    // Parse numeric values from strings like "3 Sets" or "10-12 Reps"
+                                    const setMatch = exercise.sets.toString().match(/\d+/);
+                                    const repMatch = exercise.reps.toString().match(/\d+/);
+
+                                    navigation.navigate('Tracking', {
+                                        autoStartExercise: trackerId,
+                                        targetSets: setMatch ? parseInt(setMatch[0]) : 3,
+                                        targetReps: repMatch ? parseInt(repMatch[0]) : 12
+                                    });
+                                }}
                             >
                                 <Crosshair size={16} color={theme.colors.background} />
                             </TouchableOpacity>

@@ -45,6 +45,14 @@ const WorkoutTrackingScreen = () => {
     const [activeExercise, setActiveExercise] = useState('bicep_curl');
     const [correctReps, setCorrectReps] = useState(0);
     const [incorrectReps, setIncorrectReps] = useState(0);
+
+    // Set & Session Tracking
+    const [targetSets, setTargetSets] = useState(0);
+    const [targetReps, setTargetReps] = useState(0);
+    const [currentSet, setCurrentSet] = useState(1);
+    const [sessionHistory, setSessionHistory] = useState([]); // Stores { set: 1, perfect: 10, flawed: 2 }
+    const [isWorkoutComplete, setIsWorkoutComplete] = useState(false);
+
     const [currentPhase, setCurrentPhase] = useState('down'); // 'down' or 'up'
     const [feedback, setFeedback] = useState('Stand in front of the camera');
     const [minAngleReached, setMinAngleReached] = useState(180); // Lowest angle reached in current rep
@@ -53,10 +61,15 @@ const WorkoutTrackingScreen = () => {
     const repCooldown = useRef(false);
 
     // Reset counters when switching exercises
-    const switchExercise = (id) => {
+    const switchExercise = (id, sets = 0, reps = 0) => {
         setActiveExercise(id);
         setCorrectReps(0);
         setIncorrectReps(0);
+        setTargetSets(sets);
+        setTargetReps(reps);
+        setCurrentSet(1);
+        setSessionHistory([]);
+        setIsWorkoutComplete(false);
         setCurrentPhase('down');
         setFeedback('Ready. Begin exercise!');
         setMinAngleReached(180);
@@ -66,11 +79,19 @@ const WorkoutTrackingScreen = () => {
     // Auto-Launch from Workout Plan Screen
     useEffect(() => {
         if (route.params?.autoStartExercise) {
-            switchExercise(route.params.autoStartExercise);
+            switchExercise(
+                route.params.autoStartExercise,
+                route.params.targetSets || 0,
+                route.params.targetReps || 0
+            );
             setIsCameraActive(true);
 
             // Clear params to avoid loop if user returns to this screen
-            navigation.setParams({ autoStartExercise: undefined });
+            navigation.setParams({
+                autoStartExercise: undefined,
+                targetSets: undefined,
+                targetReps: undefined
+            });
         }
     }, [route.params?.autoStartExercise]);
 
@@ -122,9 +143,31 @@ const WorkoutTrackingScreen = () => {
             let canvas;
             let ctx;
 
+            // --- STATE TRACKING ---
+            window.currentPhase = 'down';
+            window.minAngleReached = 180;
+            window.repCooldown = false;
+
             // Wait for React Native to tell us to start
             function startCamera() {
                 initEngine();
+            }
+
+            // --- REACT NATIVE BRIDGE ---
+            function postMessageToRN(type, payload) {
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: type, ...payload }));
+                }
+            }
+
+            // --- MATH HELPERS ---
+            function calculateAngle(a, b, c) {
+                const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+                let angle = Math.abs((radians * 180.0) / Math.PI);
+                if (angle > 180.0) {
+                    angle = 360 - angle;
+                }
+                return angle;
             }
 
             async function initEngine() {
@@ -189,6 +232,7 @@ const WorkoutTrackingScreen = () => {
 
                 if (shoulder?.score > 0.1 && elbow?.score > 0.1 && wrist?.score > 0.1) {
                     const angle = calculateAngle(shoulder, elbow, wrist);
+                    postMessageToRN('DEBUG', { message: 'Bicep Angle: ' + Math.round(angle) });
                     
                     // Track the tightest angle (how far they curled up)
                     if (angle < window.minAngleReached) window.minAngleReached = angle;
@@ -200,10 +244,10 @@ const WorkoutTrackingScreen = () => {
 
                             // Arm has returned down. Was it a good rep?
                             if (window.minAngleReached < 60) {
-                                postMessageToRN('REP_COMPLETED', { type: 'perfect', feedback: 'Perfect Rep! Good squeeze.' });
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Perfect Rep! Good squeeze.' });
                             } else {
                                 // They started curling but didn't go all the way up
-                                postMessageToRN('REP_COMPLETED', { type: 'flawed', feedback: 'Incomplete range! Curl all the way up.' });
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Incomplete range! Curl all the way up.' });
                             }
 
                             setTimeout(() => {
@@ -245,9 +289,19 @@ const WorkoutTrackingScreen = () => {
                     window.currentAngle = angle;
                     
                     if (window.currentPhase === 'down' && angle > 160) {
+                        if (window.minAngleReached < 140 && !window.repCooldown) {
+                            window.repCooldown = true;
+                            // Returning to standing. Evaluate the squat depth.
+                            if (window.minAngleReached < 100) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Great depth! Perfect Squat.' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Too shallow! Squat lower next time.' });
+                            }
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
                         window.currentPhase = 'up';
                         postMessageToRN('DEBUG', \`Squat Phase: UP, Angle: \${Math.round(angle)}\`);
-                        window.minAngleReached = angle; 
+                        window.minAngleReached = 180; // Reset for next rep
                     } else if (window.currentPhase === 'up' && angle < 140) {
                         window.currentPhase = 'down';
                         postMessageToRN('DEBUG', 'Squat Phase: DOWN - Rep Started');
@@ -257,15 +311,6 @@ const WorkoutTrackingScreen = () => {
                         if (angle < window.minAngleReached) {
                             window.minAngleReached = angle;
                         }
-                    }
-
-                    if (window.currentPhase === 'up' && window.minAngleReached < 140) {
-                        if (window.minAngleReached > 40 && window.minAngleReached <= 100) {
-                            postMessageToRN('REP_COMPLETED', { type: 'perfect', feedback: 'Great depth! Perfect Squat.' });
-                        } else {
-                            postMessageToRN('REP_COMPLETED', { type: 'flawed', feedback: 'Too shallow! Squat lower next time.' });
-                        }
-                        window.minAngleReached = 180; 
                     }
                 } else {
                     postMessageToRN('FEEDBACK', { message: 'Ensure full right leg is visible' });
@@ -279,14 +324,24 @@ const WorkoutTrackingScreen = () => {
                 const elbow = poses[0].keypoints.find(k => k.name === 'right_elbow');
                 const wrist = poses[0].keypoints.find(k => k.name === 'right_wrist');
 
-                if (shoulder?.score > 0.3 && elbow?.score > 0.3 && wrist?.score > 0.3) {
+                if (shoulder?.score > 0.1 && elbow?.score > 0.1 && wrist?.score > 0.1) {
                     const angle = calculateAngle(shoulder, elbow, wrist);
                     window.currentAngle = angle;
                     
                     // Down phase (eccentric press)
                     if (window.currentPhase === 'down' && angle > 150) {
+                        if (window.minAngleReached < 130 && !window.repCooldown) {
+                            window.repCooldown = true;
+                            // Arms fully extended up. Was it a complete press?
+                            if (window.minAngleReached < 70) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Full lockout! Great press.' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Push all the way up!' });
+                            }
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
                         window.currentPhase = 'up'; // 'up' means extended here
-                        window.minAngleReached = angle;
+                        window.minAngleReached = 180; // Reset for next rep
                         postMessageToRN('FEEDBACK', { message: 'Extending arm...' });
                     } else if (window.currentPhase === 'up' && angle < 130) {
                         window.currentPhase = 'down'; // 'down' means contracted
@@ -295,18 +350,6 @@ const WorkoutTrackingScreen = () => {
                     
                     if (window.currentPhase === 'down') {
                         if (angle < window.minAngleReached) window.minAngleReached = angle;
-                    }
-
-                    // Complete (lockout press)
-                    if (window.currentPhase === 'up' && window.minAngleReached < 130 && !window.repCooldown) {
-                        window.repCooldown = true;
-                        if (window.minAngleReached <= 95) {
-                            postMessageToRN('REP_COMPLETED', { type: 'perfect', feedback: 'Excellent press range!' });
-                        } else {
-                            postMessageToRN('REP_COMPLETED', { type: 'flawed', feedback: 'Lower weight further into chest/shoulders' });
-                        }
-                        window.minAngleReached = 180; 
-                        setTimeout(() => { window.repCooldown = false; }, 1000);
                     }
                 } else {
                     postMessageToRN('FEEDBACK', { message: 'Ensure right arm is fully visible' });
@@ -320,34 +363,32 @@ const WorkoutTrackingScreen = () => {
                 const elbow = poses[0].keypoints.find(k => k.name === 'right_elbow');
                 const wrist = poses[0].keypoints.find(k => k.name === 'right_wrist');
 
-                if (shoulder?.score > 0.3 && elbow?.score > 0.3 && wrist?.score > 0.3) {
+                if (shoulder?.score > 0.1 && elbow?.score > 0.1 && wrist?.score > 0.1) {
                     const angle = calculateAngle(shoulder, elbow, wrist);
                     window.currentAngle = angle;
                     
                     // Out phase (eccentric pull/stretch)
-                    if (window.currentPhase === 'down' && angle < 120) {
-                        window.currentPhase = 'up'; // 'up' means contracted here
-                        window.minAngleReached = angle;
-                        postMessageToRN('FEEDBACK', { message: 'Pulling back...' });
-                    } else if (window.currentPhase === 'up' && angle > 150) {
+                    if (window.currentPhase === 'up' && angle > 150) { // Returning to stretch
+                        if (window.minAngleReached < 120 && !window.repCooldown) {
+                            window.repCooldown = true;
+                            // Arm fully extended (row completed)
+                            if (window.minAngleReached < 80) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Strong pull! Good stretch.' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Pull further back.' });
+                            }
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
                         window.currentPhase = 'down'; // 'down' means stretched
+                        window.minAngleReached = 180; // Reset
                         postMessageToRN('FEEDBACK', { message: 'Stretching out...' });
+                    } else if (window.currentPhase === 'down' && angle < 120) { // Starting pull
+                        window.currentPhase = 'up'; // 'up' means contracted here
+                        postMessageToRN('FEEDBACK', { message: 'Pulling back...' });
                     }
                     
                     if (window.currentPhase === 'up') { // During contraction phase
                         if (angle < window.minAngleReached) window.minAngleReached = angle;
-                    }
-                    
-                    // Rep completion when arm extends after contraction
-                    if (window.currentPhase === 'down' && window.minAngleReached < 120 && !window.repCooldown) {
-                        window.repCooldown = true;
-                        if (window.minAngleReached <= 90) {
-                            postMessageToRN('REP_COMPLETED', { type: 'perfect', feedback: 'Great squeeze on the back!' });
-                        } else {
-                            postMessageToRN('REP_COMPLETED', { type: 'flawed', feedback: 'Pull further back. Squeeze shoulder blades.' });
-                        }
-                        window.minAngleReached = 180;
-                        setTimeout(() => { window.repCooldown = false; }, 1000);
                     }
                 } else {
                     postMessageToRN('FEEDBACK', { message: 'Ensure right arm is fully visible' });
@@ -361,13 +402,23 @@ const WorkoutTrackingScreen = () => {
                 const hip = poses[0].keypoints.find(k => k.name === 'right_hip');
                 const knee = poses[0].keypoints.find(k => k.name === 'right_knee');
 
-                if (shoulder?.score > 0.3 && hip?.score > 0.3 && knee?.score > 0.3) {
+                if (shoulder?.score > 0.1 && hip?.score > 0.1 && knee?.score > 0.1) {
                     const angle = calculateAngle(shoulder, hip, knee);
                     window.currentAngle = angle;
                     
                     if (window.currentPhase === 'down' && angle > 165) { // Standing upright
+                        if (window.minAngleReached < 140 && !window.repCooldown) {
+                            window.repCooldown = true;
+                            // Return to top of deadlift / hinge
+                            if (window.minAngleReached <= 110) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Perfect hinge lockout.' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Push hips further back, keep back straight.' });
+                            }
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
                         window.currentPhase = 'up'; // Lockout
-                        window.minAngleReached = angle;
+                        window.minAngleReached = 180; // Reset
                         postMessageToRN('FEEDBACK', { message: 'Standing tall...' });
                     } else if (window.currentPhase === 'up' && angle < 140) { // Hinging forward
                         window.currentPhase = 'down'; // Hinging
@@ -376,17 +427,6 @@ const WorkoutTrackingScreen = () => {
                     
                     if (window.currentPhase === 'down') { // During hinge
                         if (angle < window.minAngleReached) window.minAngleReached = angle;
-                    }
-
-                    if (window.currentPhase === 'up' && window.minAngleReached < 140 && !window.repCooldown) {
-                        window.repCooldown = true;
-                        if (window.minAngleReached <= 110) {
-                            postMessageToRN('REP_COMPLETED', { type: 'perfect', feedback: 'Perfect hinge lockout.' });
-                        } else {
-                            postMessageToRN('REP_COMPLETED', { type: 'flawed', feedback: 'Push hips further back, keep back straight.' });
-                        }
-                        window.minAngleReached = 180; 
-                        setTimeout(() => { window.repCooldown = false; }, 1000);
                     }
                 } else {
                     postMessageToRN('FEEDBACK', { message: 'Ensure full side profile is visible' });
@@ -401,14 +441,14 @@ const WorkoutTrackingScreen = () => {
                 const nose = poses[0].keypoints.find(k => k.name === 'nose');
 
                 // We just need the upper body/face visible to start tracking a hold
-                if ((nose?.score > 0.3) || (lShoulder?.score > 0.2 && rShoulder?.score > 0.2)) {
+                if ((nose?.score > 0.1) || (lShoulder?.score > 0.2 && rShoulder?.score > 0.2)) {
                     
                     // Hacky way to simulate hold time using the frame loop (approx 30fps)
                     if (!window.holdFrames) window.holdFrames = 0;
                     window.holdFrames++;
                     
                     if (window.holdFrames > 45) { // ~1.5 seconds of sustained presence
-                         postMessageToRN('REP_COMPLETED', { type: 'perfect', feedback: 'Hold it! Time added.' });
+                         postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Hold it! Time added.' });
                          window.holdFrames = 0;
                     }
                     postMessageToRN('FEEDBACK', { message: 'Hold the position!' });
@@ -448,7 +488,7 @@ const WorkoutTrackingScreen = () => {
                             // Shrink payload to only what React Native needs to draw/calculate
                             const slimPoses = poses.map(p => ({
                                 score: p.score,
-                                keypoints: p.keypoints.filter(k => k.score > 0.3).map(k => ({
+                                keypoints: p.keypoints.filter(k => k.score > 0.1).map(k => ({
                                     name: k.name,
                                     x: k.x / video.videoWidth, // Normalize 0-1
                                     y: k.y / video.videoHeight,
@@ -496,7 +536,7 @@ const WorkoutTrackingScreen = () => {
                 // Draw dots for high confidence points
                 ctx.fillStyle = '#13EC5B';
                 kps.forEach(kp => {
-                    if (kp.score > 0.3) {
+                    if (kp.score > 0.1) {
                         ctx.beginPath();
                         ctx.arc(kp.x, kp.y, 5, 0, 2 * Math.PI);
                         ctx.fill();
@@ -522,12 +562,42 @@ const WorkoutTrackingScreen = () => {
             else if (data.type === 'REP_COMPLETED') {
                 if (!repCooldown.current) {
                     repCooldown.current = true;
-                    if (data.type === 'perfect') {
-                        setCorrectReps(prev => prev + 1);
+
+                    let newCorrect = correctReps;
+                    let newIncorrect = incorrectReps;
+
+                    if (data.repQuality === 'perfect') {
+                        newCorrect++;
+                        setCorrectReps(newCorrect);
                     } else {
-                        setIncorrectReps(prev => prev + 1);
+                        newIncorrect++;
+                        setIncorrectReps(newIncorrect);
                     }
                     setFeedback(data.feedback);
+
+                    // Check if Set is Complete
+                    if (targetReps > 0 && (newCorrect + newIncorrect) >= targetReps) {
+                        const completedSetData = { set: currentSet, perfect: newCorrect, flawed: newIncorrect };
+                        const updatedHistory = [...sessionHistory, completedSetData];
+                        setSessionHistory(updatedHistory);
+
+                        if (currentSet < targetSets) {
+                            // Move to next set
+                            setTimeout(() => {
+                                setCorrectReps(0);
+                                setIncorrectReps(0);
+                                setCurrentSet(prev => prev + 1);
+                                setFeedback(`Set ${currentSet} complete! Prepare for Set ${currentSet + 1}`);
+                            }, 1500);
+                        } else {
+                            // Workout Finished
+                            setTimeout(() => {
+                                setIsWorkoutComplete(true);
+                                handleCloseCamera();
+                            }, 1500);
+                        }
+                    }
+
                     setTimeout(() => { repCooldown.current = false; }, 1000);
                 }
             }
@@ -544,112 +614,7 @@ const WorkoutTrackingScreen = () => {
             console.log("Failed to parse WebView exact message");
         }
     };
-
-    // --- BICEP CURL INTELLIGENCE ---
-    const processBicepCurls = (kps) => {
-        const shoulder = getPoint(kps, 'right_shoulder');
-        const elbow = getPoint(kps, 'right_elbow');
-        const wrist = getPoint(kps, 'right_wrist');
-
-        if (shoulder && elbow && wrist) {
-            const angle = calculateAngle(shoulder, elbow, wrist);
-
-            // Track the tightest angle (how far they curled up)
-            if (angle < minAngleReached) setMinAngleReached(angle);
-
-            // Arm straight down -> Down Phase
-            if (angle > 140) {
-                if (currentPhase === 'up' && !repCooldown.current) {
-                    repCooldown.current = true;
-
-                    // Arm has returned down. Was it a good rep?
-                    if (minAngleReached < 60) {
-                        setCorrectReps(prev => prev + 1);
-                        setFeedback('Perfect Rep! Good squeeze.');
-                    } else {
-                        // They started curling but didn't go all the way up
-                        setIncorrectReps(prev => prev + 1);
-                        setFeedback('Incomplete range! Curl all the way up.');
-                    }
-
-                    setTimeout(() => {
-                        repCooldown.current = false;
-                    }, 1000); // 1 second cooldown
-                }
-                setCurrentPhase('down');
-                setMinAngleReached(180); // Reset for next rep
-            }
-            // Arm has started curling up significantly -> Up Phase
-            // We set this trigger to < 120 so that even "half-curls" get registered as going "Up"
-            else if (angle < 120 && currentPhase === 'down') {
-                setCurrentPhase('up');
-                setFeedback('Curling up...');
-            }
-            // Mid-curl / Transition zones
-            else if (angle >= 60 && angle <= 140) {
-                if (currentPhase === 'up') {
-                    // They are in the 'Up' phase and are currently lowering the weight
-                    setFeedback('Lowering weight...');
-                } else {
-                    // They are in the 'Down' zone just starting to curl
-                    setFeedback('Keep curling...');
-                }
-            }
-        } else {
-            setFeedback('Ensure right arm is fully visible');
-        }
-    };
-
-    // --- SQUAT INTELLIGENCE ---
-    const processSquats = (kps) => {
-        const hip = getPoint(kps, 'right_hip');
-        const knee = getPoint(kps, 'right_knee');
-        const ankle = getPoint(kps, 'right_ankle');
-
-        if (hip && knee && ankle) {
-            const angle = calculateAngle(hip, knee, ankle);
-
-            if (angle < minAngleReached) setMinAngleReached(angle);
-
-            // Standing up straight -> Down Phase (because next move is down)
-            if (angle > 160) {
-                if (currentPhase === 'up' && !repCooldown.current) {
-                    repCooldown.current = true;
-
-                    // Returning to standing. Evaluate the squat depth.
-                    if (minAngleReached < 100) {
-                        setCorrectReps(prev => prev + 1);
-                        setFeedback('Great depth! Perfect Squat.');
-                    } else {
-                        setIncorrectReps(prev => prev + 1);
-                        setFeedback('Too shallow! Squat lower next time.');
-                    }
-
-                    setTimeout(() => {
-                        repCooldown.current = false;
-                    }, 1000); // 1 second cooldown
-                }
-                setCurrentPhase('down');
-                setMinAngleReached(180);
-            }
-            // Deep Squat -> Up Phase (now they must stand up)
-            else if (angle < 100 && currentPhase === 'down') {
-                setCurrentPhase('up');
-                setFeedback('Good depth! Now stand back up.');
-            }
-            // Mid-squat
-            else if (angle >= 100 && angle <= 160) {
-                if (currentPhase === 'down') {
-                    setFeedback('Lower your hips...');
-                } else {
-                    setFeedback('Standing up...');
-                }
-            }
-        } else {
-            // Uncomment to force user to show legs
-            // setFeedback('Ensure full right leg is visible');
-        }
-    };
+    // (Tracking Intelligence runs locally inside the WebView)
 
     // Close Camera UI Sequence
     const handleCloseCamera = () => {
@@ -662,7 +627,7 @@ const WorkoutTrackingScreen = () => {
     if (!isCameraActive) {
         return (
             <SafeAreaView style={styles.idleContainer} edges={['top']}>
-                <View style={styles.idleContent}>
+                <ScrollView contentContainerStyle={styles.idleContent} showsVerticalScrollIndicator={false}>
                     <View style={styles.iconCircle}>
                         <Camera size={48} color={theme.colors.primary} />
                     </View>
@@ -680,29 +645,52 @@ const WorkoutTrackingScreen = () => {
                     </TouchableOpacity>
 
                     {/* Stats from last session if available */}
-                    {(correctReps > 0 || incorrectReps > 0) && (
+                    {(sessionHistory.length > 0) && (
                         <View style={styles.lastSessionContainer}>
-                            <Text style={styles.lastSessionTitle}>Last Session Summary</Text>
-                            <View style={styles.statsRow}>
+                            <Text style={styles.lastSessionTitle}>
+                                {isWorkoutComplete ? 'Workout Summary' : 'Last Session Summary'}
+                            </Text>
+                            <Text style={styles.summaryExerciseName}>
+                                {EXERCISES.find(e => e.id === activeExercise)?.name}
+                            </Text>
+
+                            <View style={styles.historyList}>
+                                {sessionHistory.map((item, idx) => (
+                                    <View key={idx} style={styles.historyRow}>
+                                        <Text style={styles.historySetLabel}>Set {item.set}</Text>
+                                        <View style={styles.historyStats}>
+                                            <Text style={styles.historyPerfect}>{item.perfect} Perfect</Text>
+                                            <Text style={styles.historyFlawed}>{item.flawed} Flawed</Text>
+                                        </View>
+                                    </View>
+                                ))}
+                            </View>
+
+                            <View style={styles.totalStatsRow}>
                                 <View style={styles.statBox}>
-                                    <Text style={styles.statValueGreen}>{correctReps}</Text>
-                                    <Text style={styles.statLabel}>Perfect Reps</Text>
+                                    <Text style={styles.statValueGreen}>
+                                        {sessionHistory.reduce((acc, curr) => acc + curr.perfect, 0)}
+                                    </Text>
+                                    <Text style={styles.statLabel}>Total Perfect</Text>
                                 </View>
                                 <View style={styles.statBox}>
-                                    <Text style={styles.statValueRed}>{incorrectReps}</Text>
-                                    <Text style={styles.statLabel}>Flawed Reps</Text>
+                                    <Text style={styles.statValueRed}>
+                                        {sessionHistory.reduce((acc, curr) => acc + curr.flawed, 0)}
+                                    </Text>
+                                    <Text style={styles.statLabel}>Total Flawed</Text>
                                 </View>
                             </View>
                         </View>
                     )}
-                </View>
+                    <View style={{ height: 100 }} />
+                </ScrollView>
             </SafeAreaView>
         );
     }
 
     // RENDERS THE ACTIVE AI TRACKER FULLSCREEN
     return (
-        <SafeAreaView style={styles.wrapper} edges={[]}>
+        <SafeAreaView style={styles.wrapper} edges={['top']}>
             {/* Top Minimal Header over Camera */}
             <View style={styles.cameraHeader}>
                 <View style={styles.statusBadge}>
@@ -757,7 +745,11 @@ const WorkoutTrackingScreen = () => {
                     allowsInlineMediaPlayback={true}
                     mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
                     onMessage={handleWebViewMessage}
-                    injectedJavaScript={INJECTED_JAVASCRIPT}
+                    injectedJavaScript={`
+                        ${INJECTED_JAVASCRIPT}
+                        window.activeExercise = '${activeExercise}';
+                        true;
+                    `}
                     onLoadEnd={() => {
                         // Kick off the camera once the basic HTML shell is loaded
                         webViewRef.current?.injectJavaScript("startCamera(); true;");
@@ -782,6 +774,11 @@ const WorkoutTrackingScreen = () => {
                         <Text style={styles.exerciseName}>
                             {EXERCISES.find(e => e.id === activeExercise)?.name}
                         </Text>
+                        {targetSets > 0 && (
+                            <Text style={styles.goalText}>
+                                Set {currentSet} of {targetSets} • Goal: {targetReps} Reps
+                            </Text>
+                        )}
                         <Text style={styles.feedbackText}>{feedback}</Text>
                     </View>
 
@@ -871,6 +868,58 @@ const styles = StyleSheet.create({
     statsRow: {
         flexDirection: 'row',
         justifyContent: 'space-around',
+    },
+    totalStatsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginTop: 20,
+        paddingTop: 15,
+        borderTopWidth: 1,
+        borderTopColor: '#222',
+    },
+    summaryExerciseName: {
+        color: theme.colors.primary,
+        fontSize: 18,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    historyList: {
+        maxHeight: 200,
+        marginBottom: 10,
+    },
+    historyRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.05)',
+    },
+    historySetLabel: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    historyStats: {
+        flexDirection: 'row',
+        gap: 15,
+    },
+    historyPerfect: {
+        color: theme.colors.primary,
+        fontSize: 13,
+        fontWeight: 'bold',
+    },
+    historyFlawed: {
+        color: '#FF6B6B',
+        fontSize: 13,
+        fontWeight: 'bold',
+    },
+    goalText: {
+        color: theme.colors.primary,
+        fontSize: 12,
+        fontWeight: 'bold',
+        marginBottom: 2,
     },
     statBox: {
         alignItems: 'center',
@@ -962,7 +1011,7 @@ const styles = StyleSheet.create({
     },
     workoutHud: {
         position: 'absolute',
-        bottom: 40,
+        bottom: 90, // Increased to lift above the bottom navigation bar
         left: 20,
         right: 20,
         flexDirection: 'row',
