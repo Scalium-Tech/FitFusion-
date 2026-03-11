@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Camera as ExpoCamera } from 'expo-camera';
@@ -60,6 +60,7 @@ const WorkoutTrackingScreen = () => {
 
     const [currentPhase, setCurrentPhase] = useState('down'); // 'down' or 'up'
     const [feedback, setFeedback] = useState('Stand in front of the camera');
+    const [showLargeWarning, setShowLargeWarning] = useState(false);
     const [minAngleReached, setMinAngleReached] = useState(180); // Lowest angle reached in current rep
 
     // Prevent double-counting reps from 60fps camera feed
@@ -206,6 +207,39 @@ const WorkoutTrackingScreen = () => {
                 return null;
             }
 
+            // --- ORIENTATION DETECTION ---
+            function checkOrientation(poses) {
+                const lShoulder = poses[0].keypoints.find(k => k.name === 'left_shoulder');
+                const rShoulder = poses[0].keypoints.find(k => k.name === 'right_shoulder');
+                const lAnkle = poses[0].keypoints.find(k => k.name === 'left_ankle');
+                const rAnkle = poses[0].keypoints.find(k => k.name === 'right_ankle');
+                const nose = poses[0].keypoints.find(k => k.name === 'nose');
+
+                if (lShoulder?.score > 0.3 && rShoulder?.score > 0.3) {
+                    const shoulderWidth = Math.abs(lShoulder.x - rShoulder.x);
+                    
+                    // Use body height as a normalizer (Nose to Ankle)
+                    const refPoint = lAnkle?.score > 0.3 ? lAnkle : (rAnkle?.score > 0.3 ? rAnkle : null);
+                    if (refPoint && nose) {
+                        const bodyHeight = Math.abs(nose.y - refPoint.y);
+                        const ratio = shoulderWidth / bodyHeight;
+                        postMessageToRN('DEBUG', { message: 'Orientation Debug - Ratio: ' + ratio.toFixed(2) + ', S-Width: ' + shoulderWidth.toFixed(2) + ', B-Height: ' + bodyHeight.toFixed(2) });
+                        
+                        // Ratio > 0.55 represents a diagonal/front-facing stance.
+                        // Lowered from 0.8 for better accuracy while remaining lenient.
+                        return ratio < 0.55; 
+                    }
+                    
+                    // Fallback: If ankles aren't visible, normalize shoulder width using the video's actual width
+                    // Since MoveNet returns absolute pixels (e.g. 150px), we must convert it to a percentage (150/640)
+                    const normalizedShoulderWidth = shoulderWidth / video.videoWidth;
+                    postMessageToRN('DEBUG', { message: 'Orientation Fallback - Normalized Width: ' + normalizedShoulderWidth.toFixed(2) });
+                    
+                    return normalizedShoulderWidth < 0.20; // Needs to take up less than 20% of the screen width to be a side profile
+                }
+                return true; // Default to valid if points missing
+            }
+
             async function initEngine() {
                 video = document.getElementById('video');
                 canvas = document.getElementById('output');
@@ -282,6 +316,18 @@ const WorkoutTrackingScreen = () => {
 
                 if (side) {
                     const [shoulder, elbow, wrist] = side;
+                    // --- ORIENTATION GUARD ---
+                    const isValidOrientation = checkOrientation(poses);
+                    if (!isValidOrientation) {
+                        postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways for better tracking' });
+                        window.hadOrientationWarning = true;
+                        return; // Halt rep processing until turned
+                    } else if (window.hadOrientationWarning) {
+                        // Clear warning immediately once they turn
+                        postMessageToRN('FEEDBACK', { message: 'Ready. Begin exercise!' });
+                        window.hadOrientationWarning = false;
+                    }
+
                     const angle = calculateAngle(shoulder, elbow, wrist);
                     postMessageToRN('DEBUG', { message: 'Bicep Angle: ' + Math.round(angle) });
                     
@@ -674,18 +720,53 @@ const WorkoutTrackingScreen = () => {
                 requestAnimationFrame(detectPose);
             }
             
+            // Define the connections between the 17 MoveNet keypoints
+            const SKELETON_CONNECTIONS = [
+                ['left_ear', 'left_eye'], ['left_eye', 'nose'], ['right_eye', 'nose'], ['right_ear', 'right_eye'],
+                ['left_shoulder', 'right_shoulder'], ['left_shoulder', 'left_elbow'], ['left_elbow', 'left_wrist'],
+                ['right_shoulder', 'right_elbow'], ['right_elbow', 'right_wrist'],
+                ['left_shoulder', 'left_hip'], ['right_shoulder', 'right_hip'], ['left_hip', 'right_hip'],
+                ['left_hip', 'left_knee'], ['left_knee', 'left_ankle'],
+                ['right_hip', 'right_knee'], ['right_knee', 'right_ankle']
+            ];
+
             // Draw lines inside the webview (faster than React Native drawing)
             function drawSkeleton(pose) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
                 const kps = pose.keypoints;
+
+                // 1. Draw glowing lines connecting the joints
+                ctx.strokeStyle = 'rgba(19, 236, 91, 0.7)'; // Match the primary neon green, slightly transparent
+                ctx.lineWidth = 4;
                 
-                // Draw dots for high confidence points
-                ctx.fillStyle = '#13EC5B';
+                SKELETON_CONNECTIONS.forEach(connection => {
+                    const partA = connection[0];
+                    const partB = connection[1];
+                    const kpA = kps.find(k => k.name === partA);
+                    const kpB = kps.find(k => k.name === partB);
+                    
+                    // Only draw the line if both connected joints are visible (very lenient threshold)
+                    if (kpA && kpB && kpA.score > 0.1 && kpB.score > 0.1) {
+                        ctx.beginPath();
+                        ctx.moveTo(kpA.x, kpA.y);
+                        ctx.lineTo(kpB.x, kpB.y);
+                        ctx.stroke();
+                    }
+                });
+                
+                // 2. Draw dots for high confidence points ON TOP of the lines
                 kps.forEach(kp => {
                     if (kp.score > 0.1) {
+                        ctx.fillStyle = '#13EC5B'; // Solid primary green
                         ctx.beginPath();
-                        ctx.arc(kp.x, kp.y, 5, 0, 2 * Math.PI);
+                        ctx.arc(kp.x, kp.y, 6, 0, 2 * Math.PI);
+                        ctx.fill();
+                        
+                        // Add a white center to make the joints pop like a professional UI
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.beginPath();
+                        ctx.arc(kp.x, kp.y, 2, 0, 2 * Math.PI);
                         ctx.fill();
                     }
                 });
@@ -750,6 +831,12 @@ const WorkoutTrackingScreen = () => {
             }
             else if (data.type === 'FEEDBACK') {
                 setFeedback(data.message);
+                // Trigger large overlay for significant warnings
+                if (data.message.includes('⚠️')) {
+                    setShowLargeWarning(true);
+                } else {
+                    setShowLargeWarning(false);
+                }
             }
             else if (data.type === 'ERROR') {
                 console.error("WebView Camera Error:", data.message);
@@ -916,8 +1003,27 @@ const WorkoutTrackingScreen = () => {
                     }}
                 />
 
+                {/* Large Visibility Overlay for Orientation/Form Warnings */}
+                {showLargeWarning && isTrackerReady && (
+                    <View style={styles.largeWarningOverlay}>
+                        <View style={styles.largeWarningBox}>
+                            <AlertCircle size={48} color={theme.colors.primary} style={{ marginBottom: 15 }} />
+                            <Text style={styles.largeWarningText}>{feedback}</Text>
+                        </View>
+                    </View>
+                )}
+
+                {/* AI Initialization Loading Overlay */}
+                {!isTrackerReady && (
+                    <View style={styles.loadingOverlay}>
+                        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginBottom: 20, transform: [{ scale: 1.5 }] }} />
+                        <Text style={styles.loadingTitle}>Waking up AI Engine...</Text>
+                        <Text style={styles.loadingSubtitle}>Loading neural networks and connecting your skeletal tracker.</Text>
+                    </View>
+                )}
+
                 {/* Workout HUD Overlay */}
-                <View style={styles.workoutHud}>
+                <View style={[styles.workoutHud, !isTrackerReady && { opacity: 0 }]}>
                     {/* Correct Reps */}
                     <View style={styles.repContainer}>
                         <Text style={styles.repCount}>{correctReps}</Text>
@@ -1234,6 +1340,52 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 10,
+    },
+    largeWarningOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 100,
+        backgroundColor: 'rgba(0,0,0,0.1)', // Subtle tint for the whole screen
+    },
+    largeWarningBox: {
+        width: width * 0.85,
+        backgroundColor: 'rgba(0,0,0,0.75)', // High contrast 75% dark
+        padding: 30,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: 'rgba(19, 236, 91, 0.5)', // Neon border for attention
+    },
+    largeWarningText: {
+        color: '#FFF',
+        fontSize: 22,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        lineHeight: 30,
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 50,
+        paddingHorizontal: 40,
+    },
+    loadingTitle: {
+        color: '#FFF',
+        fontSize: 24,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginBottom: 10,
+    },
+    loadingSubtitle: {
+        color: theme.colors.primary,
+        fontSize: 14,
+        textAlign: 'center',
+        fontWeight: '600',
+        lineHeight: 20,
     }
 });
 

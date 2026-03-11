@@ -1,0 +1,53 @@
+AI Orientation Guidelines
+
+The AI uses real-time guidance messages to ensure the user is standing correctly before counting their reps. Different exercises require different camera perspectives. 
+
+---
+
+### 1. Exercises Requiring a SIDE Profile
+For these exercises, the camera needs to see the side of the user's body to accurately measure the bend of their spine, hips, knees, or elbows.
+
+* Bicep Curls
+  - AI Form Check Focus: Elbow angle & shoulder sway
+  - Dynamic Guidance Message (Red): ⚠️ "Turn sideways for tracking!"
+  - Success Message (Green): ✅ "Ready. Begin exercise!"
+
+* Bodyweight Squats
+  - AI Form Check Focus: Hip crease depth & spine angle
+  - Dynamic Guidance Message (Red): ⚠️ "Turn sideways so I can see depth!"
+  - Success Message (Green): ✅ "Perfect side profile. Start squatting."
+
+* Hinging (Deadlifts/RDLs)
+  - AI Form Check Focus: Lower back rounding & hip hinge
+  - Dynamic Guidance Message (Red): ⚠️ "Turn sideways to track your lower back!"
+  - Success Message (Green): ✅ "Back is visible. Begin hinging."
+
+* Planks / Core Holds
+  - AI Form Check Focus: Hip drop (hips sagging or raised)
+  - Dynamic Guidance Message (Red): ⚠️ "Turn sideways to your camera!"
+  - Success Message (Green): ✅ "Ready. Hold that position!"
+
+---
+
+### 2. Exercises Requiring a FRONT Profile
+For these exercises, the camera needs to see the front of the user to track symmetry (e.g., are both arms moving together? Are the knees caving inward?).
+
+* Pressing (Shoulder Press)
+  - AI Form Check Focus: Arm extension & symmetry
+  - Dynamic Guidance Message (Red): ⚠️ "Face the camera directly!"
+  - Success Message (Green): ✅ "Ready. Press up!"
+
+* Jumping Jacks
+  - AI Form Check Focus: Arm/leg spread width
+  - Dynamic Guidance Message (Red): ⚠️ "Face forward for Jumping Jacks!"
+  - Success Message (Green): ✅ "Ready. Start jumping!"
+
+* High Knees
+  - AI Form Check Focus: Knee height comparison
+  - Dynamic Guidance Message (Red): ⚠️ "Face the camera directly!"
+  - Success Message (Green): ✅ "Ready. Drive those knees!"
+
+* Pulling (Rows/Pullups)
+  - AI Form Check Focus: Symmetrical shoulder movement
+  - Dynamic Guidance Message (Red): ⚠️ "Face the camera directly!"
+  - Success Message (Green): ✅ "Ready. Begin pulling."
