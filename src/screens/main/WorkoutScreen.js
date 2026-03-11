@@ -45,7 +45,7 @@ const WorkoutScreen = () => {
     // Maps all 32 AI generated exercise names to their primary biomechanical tracker ID
     const LIVE_TRACKING_SUPPORTED = {
         // Squat Variants
-        "Bodyweight Squats": "squat", "Jump Squats": "squat", "Goblet Squats": "squat", "Barbell Squats": "squat", "Leg Press": "squat",
+        "Bodyweight Squats": "squat", "Jump Squats": "squat", "Goblet Squats": "squat", "Barbell Squats": "squat",
 
         // Press Variations (Chest & Shoulders)
         "Push-ups": "press", "Knee Push-ups": "press", "Barbell Bench Press": "press", "Dumbbell Bench Press": "press", "Incline Dumbbell Press": "press", "Dumbbell Shoulder Press": "press",
@@ -54,18 +54,18 @@ const WorkoutScreen = () => {
         "Lat Pulldowns": "pull", "Seated Cable Rows": "pull", "Dumbbell Rows": "pull",
 
         // Hinge Variations (Lower Back & Glutes)
-        "Deadlifts": "hinge", "Romanian Deadlifts (RDLs)": "hinge", "Glute Bridges": "hinge",
+        "Deadlifts": "hinge", "Romanian Deadlifts (RDLs)": "hinge",
 
         // Static Holds (Core)
-        "Planks": "hold", "Side Planks": "hold",
+        "Planks": "plank", "Side Planks": "plank",
 
         // Accessory/Isolation Variations
         "Dumbbell Bicep Curls": "accessory_arm", "Triceps Rope Pushdowns": "accessory_arm", "Dumbbell Lateral Raises": "accessory_arm",
         "Leg Extensions": "accessory_leg", "Hamstring Curls": "accessory_leg",
         "Crunches": "accessory_core", "Cable Crunches": "accessory_core", "Bicycle Crunches": "accessory_core", "Mountain Climbers": "accessory_core",
 
-        // Cardio/Full Body (Mapped to basic tracking for now)
-        "Forward Lunges": "squat", "Reverse Lunges": "squat", "Burpees": "squat", "High Knees": "hold", "Jumping Jacks": "hold"
+        // Cardio/Full Body
+        "Forward Lunges": "squat", "Reverse Lunges": "squat", "Burpees": "squat", "High Knees": "high_knees", "Jumping Jacks": "jumping_jacks"
     };
 
     // Dictionary matching exact exercise strings to Cloudinary URLs
@@ -373,7 +373,7 @@ const WorkoutScreen = () => {
                                     <View style={styles.statItem}>
                                         <ListChecks size={14} color="#FFF" />
                                         <Text style={styles.statText}>
-                                            {currentDayData?.exercises?.length || 0} {isRestDay ? 'Movements' : 'Exercises'}
+                                            {(currentDayData?.exercises?.filter(ex => !['Leg Press', 'Glute Bridges', 'Leg Extensions', 'Hamstring Curls'].includes(ex.name))?.length || 0)} {isRestDay ? 'Movements' : 'Exercises'}
                                         </Text>
                                     </View>
                                     <View style={styles.statDivider} />
@@ -390,7 +390,7 @@ const WorkoutScreen = () => {
                         {isRestDay && renderRecoveryAdvice()}
 
                         <Text style={styles.sectionTitle}>{isRestDay ? 'Recovery Routine' : 'Exercise List'}</Text>
-                        {currentDayData?.exercises?.map(renderExercise)}
+                        {currentDayData?.exercises?.filter(ex => !['Leg Press', 'Glute Bridges', 'Leg Extensions', 'Hamstring Curls'].includes(ex.name)).map(renderExercise)}
                     </View>
                 )}
                 <View style={{ height: 100 }} />

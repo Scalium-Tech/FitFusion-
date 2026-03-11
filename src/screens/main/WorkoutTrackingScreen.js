@@ -3,7 +3,8 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { Camera, X, CheckCircle2 } from 'lucide-react-native';
+import { Camera as ExpoCamera } from 'expo-camera';
+import { Camera, X, CheckCircle2, AlertCircle } from 'lucide-react-native';
 import { theme } from '../../theme';
 
 const { width, height } = Dimensions.get('window');
@@ -19,12 +20,15 @@ const INJECTED_JAVASCRIPT = `
 `;
 
 const EXERCISES = [
-    { id: 'bicep_curl', name: 'Bicep Curls (Right)' },
+    { id: 'bicep_curl', name: 'Bicep Curls' },
     { id: 'squat', name: 'Bodyweight Squats' },
     { id: 'press', name: 'Pressing Movements' },
     { id: 'pull', name: 'Pulling/Rowing Movements' },
     { id: 'hinge', name: 'Hinging Movements' },
     { id: 'hold', name: 'Static Core Holds' },
+    { id: 'plank', name: 'Plank' },
+    { id: 'high_knees', name: 'High Knees' },
+    { id: 'jumping_jacks', name: 'Jumping Jacks' },
     { id: 'accessory_arm', name: 'Arm Isolation' },
     { id: 'accessory_leg', name: 'Leg Isolation' },
     { id: 'accessory_core', name: 'Core Movements' },
@@ -36,6 +40,7 @@ const WorkoutTrackingScreen = () => {
 
     // UI Navigation State
     const [isCameraActive, setIsCameraActive] = useState(false);
+    const [hasPermission, setHasPermission] = useState(null);
 
     const webViewRef = useRef(null);
     const [poses, setPoses] = useState([]);
@@ -76,7 +81,20 @@ const WorkoutTrackingScreen = () => {
         repCooldown.current = false;
     };
 
-    // Auto-Launch from Workout Plan Screen
+    // Auto-Launch and Permission Handling
+    useEffect(() => {
+        if (isCameraActive) {
+            (async () => {
+                const { status } = await ExpoCamera.requestCameraPermissionsAsync();
+                setHasPermission(status === 'granted');
+                if (status !== 'granted') {
+                    setIsCameraActive(false);
+                    alert("Camera permission is required to track your workout.");
+                }
+            })();
+        }
+    }, [isCameraActive]);
+
     useEffect(() => {
         if (route.params?.autoStartExercise) {
             switchExercise(
@@ -170,6 +188,24 @@ const WorkoutTrackingScreen = () => {
                 return angle;
             }
 
+            // --- BILATERAL SIDE SELECTOR ---
+            // Returns the 3 keypoints from whichever side (left or right) is more visible
+            function getBestSide(poses, pointNames) {
+                const right = pointNames.map(n => poses[0].keypoints.find(k => k.name === 'right_' + n));
+                const left  = pointNames.map(n => poses[0].keypoints.find(k => k.name === 'left_' + n));
+
+                const rScore = right.reduce((sum, p) => sum + (p?.score || 0), 0) / right.length;
+                const lScore = left.reduce((sum, p) => sum + (p?.score || 0), 0) / left.length;
+
+                const rValid = right.every(p => p?.score > 0.4);
+                const lValid = left.every(p => p?.score > 0.4);
+
+                if (rValid && lValid) return rScore >= lScore ? right : left;
+                if (rValid) return right;
+                if (lValid) return left;
+                return null;
+            }
+
             async function initEngine() {
                 video = document.getElementById('video');
                 canvas = document.getElementById('output');
@@ -186,10 +222,21 @@ const WorkoutTrackingScreen = () => {
                     }
 
                     // 1. Get Camera Feed
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-                        audio: false
-                    });
+                    // Use the specific implementation that we found available
+                    let stream;
+                    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                        stream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                            audio: false
+                        });
+                    } else {
+                        stream = await new Promise((resolve, reject) => {
+                            getUserMedia.call(navigator, {
+                                video: { facingMode: 'user' },
+                                audio: false
+                            }, resolve, reject);
+                        });
+                    }
                     video.srcObject = stream;
                     
                     // Wait for video to be ready before firing
@@ -204,7 +251,12 @@ const WorkoutTrackingScreen = () => {
                     canvas.height = video.videoHeight;
 
                     // 2. Load MoveNet AI
-                    await tf.setBackend('webgl');
+                    try {
+                        await tf.setBackend('webgl');
+                    } catch (e) {
+                        console.log("WebGL not supported, falling back to CPU");
+                        await tf.setBackend('cpu');
+                    }
                     await tf.ready();
                     detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
                         modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
@@ -226,11 +278,10 @@ const WorkoutTrackingScreen = () => {
 
             // --- BICEP CURL LOGIC (Shoulder, Elbow, Wrist) ---
             function processBicepCurls(poses) {
-                const shoulder = poses[0].keypoints.find(k => k.name === 'right_shoulder');
-                const elbow = poses[0].keypoints.find(k => k.name === 'right_elbow');
-                const wrist = poses[0].keypoints.find(k => k.name === 'right_wrist');
+                const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
 
-                if (shoulder?.score > 0.1 && elbow?.score > 0.1 && wrist?.score > 0.1) {
+                if (side) {
+                    const [shoulder, elbow, wrist] = side;
                     const angle = calculateAngle(shoulder, elbow, wrist);
                     postMessageToRN('DEBUG', { message: 'Bicep Angle: ' + Math.round(angle) });
                     
@@ -274,17 +325,16 @@ const WorkoutTrackingScreen = () => {
                         }
                     }
                 } else {
-                    postMessageToRN('FEEDBACK', { message: 'Ensure right arm is fully visible' });
+                    postMessageToRN('FEEDBACK', { message: 'Ensure your arm is fully visible' });
                 }
             }
 
              // --- SQUAT LOGIC (Hip, Knee, Ankle) ---
             function processSquats(poses) {
-                const hip = poses[0].keypoints.find(k => k.name === 'right_hip');
-                const knee = poses[0].keypoints.find(k => k.name === 'right_knee');
-                const ankle = poses[0].keypoints.find(k => k.name === 'right_ankle');
+                const side = getBestSide(poses, ['hip', 'knee', 'ankle']);
 
-                if (hip?.score > 0.1 && knee?.score > 0.1 && ankle?.score > 0.1) {
+                if (side) {
+                    const [hip, knee, ankle] = side;
                     const angle = calculateAngle(hip, knee, ankle);
                     window.currentAngle = angle;
                     
@@ -300,7 +350,7 @@ const WorkoutTrackingScreen = () => {
                             setTimeout(() => { window.repCooldown = false; }, 1000);
                         }
                         window.currentPhase = 'up';
-                        postMessageToRN('DEBUG', \`Squat Phase: UP, Angle: \${Math.round(angle)}\`);
+                        postMessageToRN('DEBUG', 'Squat Phase: UP, Angle: ' + Math.round(angle));
                         window.minAngleReached = 180; // Reset for next rep
                     } else if (window.currentPhase === 'up' && angle < 140) {
                         window.currentPhase = 'down';
@@ -313,18 +363,17 @@ const WorkoutTrackingScreen = () => {
                         }
                     }
                 } else {
-                    postMessageToRN('FEEDBACK', { message: 'Ensure full right leg is visible' });
+                    postMessageToRN('FEEDBACK', { message: 'Ensure your full leg is visible' });
                 }
             }
 
             // --- PRESS LOGIC (Push-ups, Bench Press, Shoulder Press) ---
             // Tracks Elbow Angle (Shoulder, Elbow, Wrist)
             function processPress(poses) {
-                const shoulder = poses[0].keypoints.find(k => k.name === 'right_shoulder');
-                const elbow = poses[0].keypoints.find(k => k.name === 'right_elbow');
-                const wrist = poses[0].keypoints.find(k => k.name === 'right_wrist');
+                const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
 
-                if (shoulder?.score > 0.1 && elbow?.score > 0.1 && wrist?.score > 0.1) {
+                if (side) {
+                    const [shoulder, elbow, wrist] = side;
                     const angle = calculateAngle(shoulder, elbow, wrist);
                     window.currentAngle = angle;
                     
@@ -352,18 +401,17 @@ const WorkoutTrackingScreen = () => {
                         if (angle < window.minAngleReached) window.minAngleReached = angle;
                     }
                 } else {
-                    postMessageToRN('FEEDBACK', { message: 'Ensure right arm is fully visible' });
+                    postMessageToRN('FEEDBACK', { message: 'Ensure your arm is fully visible' });
                 }
             }
 
             // --- PULL LOGIC (Rows, Pulldowns) ---
             // Inverted Press Logic (Max Contraction at low angle)
             function processPull(poses) {
-                const shoulder = poses[0].keypoints.find(k => k.name === 'right_shoulder');
-                const elbow = poses[0].keypoints.find(k => k.name === 'right_elbow');
-                const wrist = poses[0].keypoints.find(k => k.name === 'right_wrist');
+                const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
 
-                if (shoulder?.score > 0.1 && elbow?.score > 0.1 && wrist?.score > 0.1) {
+                if (side) {
+                    const [shoulder, elbow, wrist] = side;
                     const angle = calculateAngle(shoulder, elbow, wrist);
                     window.currentAngle = angle;
                     
@@ -391,18 +439,17 @@ const WorkoutTrackingScreen = () => {
                         if (angle < window.minAngleReached) window.minAngleReached = angle;
                     }
                 } else {
-                    postMessageToRN('FEEDBACK', { message: 'Ensure right arm is fully visible' });
+                    postMessageToRN('FEEDBACK', { message: 'Ensure your arm is fully visible' });
                 }
             }
 
             // --- HINGE LOGIC (Deadlifts, RDLs) ---
             // Tracks Hip extension (Shoulder, Hip, Knee)
             function processHinge(poses) {
-                const shoulder = poses[0].keypoints.find(k => k.name === 'right_shoulder');
-                const hip = poses[0].keypoints.find(k => k.name === 'right_hip');
-                const knee = poses[0].keypoints.find(k => k.name === 'right_knee');
+                const side = getBestSide(poses, ['shoulder', 'hip', 'knee']);
 
-                if (shoulder?.score > 0.1 && hip?.score > 0.1 && knee?.score > 0.1) {
+                if (side) {
+                    const [shoulder, hip, knee] = side;
                     const angle = calculateAngle(shoulder, hip, knee);
                     window.currentAngle = angle;
                     
@@ -429,32 +476,126 @@ const WorkoutTrackingScreen = () => {
                         if (angle < window.minAngleReached) window.minAngleReached = angle;
                     }
                 } else {
-                    postMessageToRN('FEEDBACK', { message: 'Ensure full side profile is visible' });
+                    postMessageToRN('FEEDBACK', { message: 'Ensure your full side profile is visible' });
                 }
             }
 
-            // --- HOLD LOGIC (Planks & Core) ---
-            // Timer based. Tracks upper body stability so it works from front angles.
+            // --- PLANK LOGIC (Shoulder, Hip, Ankle) ---
+            function processPlank(poses) {
+                const side = getBestSide(poses, ['shoulder', 'hip', 'ankle']);
+                if (side) {
+                    const [shoulder, hip, ankle] = side;
+                    const angle = calculateAngle(shoulder, hip, ankle);
+                    
+                    // A perfect plank is a straight line (180 degrees)
+                    // We allow some margin (165-195)
+                    if (angle >= 165 && angle <= 195) {
+                        if (!window.holdFrames) window.holdFrames = 0;
+                        window.holdFrames++;
+                        
+                        if (window.holdFrames > 30) { // ~1 second of perfect form
+                             postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Perfect form! Keep holding.' });
+                             window.holdFrames = 0;
+                        }
+                        postMessageToRN('FEEDBACK', { message: 'Great Plank! Hold steady.' });
+                    } else if (angle < 165) {
+                        window.holdFrames = 0;
+                        postMessageToRN('FEEDBACK', { message: "Don't pike your hips! Lower them." });
+                    } else if (angle > 195) {
+                        window.holdFrames = 0;
+                        postMessageToRN('FEEDBACK', { message: "Don't let your hips sag! Lift them up." });
+                    }
+                } else {
+                    postMessageToRN('FEEDBACK', { message: 'Ensure full side profile is visible for Plank' });
+                }
+            }
+
+            // --- HIGH KNEES LOGIC (Hip, Knee, Ankle) ---
+            function processHighKnees(poses) {
+                const side = getBestSide(poses, ['hip', 'knee', 'ankle']);
+                if (side) {
+                    const [hip, knee, ankle] = side;
+                    
+                    // VALIDATION: Ensure vertical separation (Ankle must be lower than Hip)
+                    const verticalSpan = Math.abs(ankle.y - hip.y);
+                    if (verticalSpan < 100) { // On face, this span would be tiny
+                        postMessageToRN('FEEDBACK', { message: 'Step back to show your full legs' });
+                        return;
+                    }
+
+                    const angle = calculateAngle(hip, knee, ankle);
+                    
+                    // Knee high trigger (angle < 100)
+                    if (angle < 100 && window.currentPhase === 'down') {
+                        window.currentPhase = 'up';
+                        postMessageToRN('FEEDBACK', { message: 'Knee Up!' });
+                    } 
+                    // Foot back down trigger (angle > 160)
+                    else if (angle > 160 && window.currentPhase === 'up') {
+                        if (!window.repCooldown) {
+                            window.repCooldown = true;
+                            postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Great height!' });
+                            setTimeout(() => { window.repCooldown = false; }, 500);
+                        }
+                        window.currentPhase = 'down';
+                        postMessageToRN('FEEDBACK', { message: 'Keep running!' });
+                    }
+                } else {
+                    postMessageToRN('FEEDBACK', { message: 'Ensure your legs are visible for High Knees' });
+                }
+            }
+
+            // --- JUMPING JACKS LOGIC (Shoulder, Hip, Ankle) ---
+            function processJumpingJacks(poses) {
+                const lShoulder = poses[0].keypoints.find(k => k.name === 'left_shoulder');
+                const rShoulder = poses[0].keypoints.find(k => k.name === 'right_shoulder');
+                const lHip = poses[0].keypoints.find(k => k.name === 'left_hip');
+                const rHip = poses[0].keypoints.find(k => k.name === 'right_hip');
+                const lAnkle = poses[0].keypoints.find(k => k.name === 'left_ankle');
+                const rAnkle = poses[0].keypoints.find(k => k.name === 'right_ankle');
+
+                if (lShoulder?.score > 0.1 && rShoulder?.score > 0.1 && lAnkle?.score > 0.1 && rAnkle?.score > 0.1) {
+                    // Track leg spread: distance between ankles vs distance between hips
+                    const hipWidth = Math.abs(rHip.x - lHip.x);
+                    const ankleWidth = Math.abs(rAnkle.x - lAnkle.x);
+                    
+                    // Trigger "UP" when legs are spread significantly wider than hips
+                    if (ankleWidth > hipWidth * 2.5 && window.currentPhase === 'down') {
+                        window.currentPhase = 'up';
+                        postMessageToRN('FEEDBACK', { message: 'Jumping out!' });
+                    }
+                    // Trigger "DOWN" when legs come back together
+                    else if (ankleWidth < hipWidth * 1.5 && window.currentPhase === 'up') {
+                        if (!window.repCooldown) {
+                            window.repCooldown = true;
+                            postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Great Jack!' });
+                            setTimeout(() => { window.repCooldown = false; }, 500);
+                        }
+                        window.currentPhase = 'down';
+                        postMessageToRN('FEEDBACK', { message: 'Ready for next...' });
+                    }
+                } else {
+                    postMessageToRN('FEEDBACK', { message: 'Ensure full body is visible for Jumping Jacks' });
+                }
+            }
+
+            // --- HOLD LOGIC (Legacy / Fallback) ---
             function processHold(poses) {
                 const lShoulder = poses[0].keypoints.find(k => k.name === 'left_shoulder');
                 const rShoulder = poses[0].keypoints.find(k => k.name === 'right_shoulder');
                 const nose = poses[0].keypoints.find(k => k.name === 'nose');
 
-                // We just need the upper body/face visible to start tracking a hold
                 if ((nose?.score > 0.1) || (lShoulder?.score > 0.2 && rShoulder?.score > 0.2)) {
-                    
-                    // Hacky way to simulate hold time using the frame loop (approx 30fps)
                     if (!window.holdFrames) window.holdFrames = 0;
                     window.holdFrames++;
                     
-                    if (window.holdFrames > 45) { // ~1.5 seconds of sustained presence
+                    if (window.holdFrames > 45) {
                          postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Hold it! Time added.' });
                          window.holdFrames = 0;
                     }
                     postMessageToRN('FEEDBACK', { message: 'Hold the position!' });
-                    
                 } else {
-                    window.holdFrames = 0; // Reset counter if they leave frame
+                    window.holdFrames = 0;
                     postMessageToRN('FEEDBACK', { message: 'Hold your form in camera view' });
                 }
             }
@@ -488,7 +629,7 @@ const WorkoutTrackingScreen = () => {
                             // Shrink payload to only what React Native needs to draw/calculate
                             const slimPoses = poses.map(p => ({
                                 score: p.score,
-                                keypoints: p.keypoints.filter(k => k.score > 0.1).map(k => ({
+                                keypoints: p.keypoints.filter(k => k.score > 0.2).map(k => ({
                                     name: k.name,
                                     x: k.x / video.videoWidth, // Normalize 0-1
                                     y: k.y / video.videoHeight,
@@ -510,6 +651,12 @@ const WorkoutTrackingScreen = () => {
                                 processPull(poses);
                             } else if (window.activeExercise === 'hinge') {
                                 processHinge(poses);
+                            } else if (window.activeExercise === 'plank') {
+                                processPlank(poses);
+                            } else if (window.activeExercise === 'high_knees') {
+                                processHighKnees(poses);
+                            } else if (window.activeExercise === 'jumping_jacks') {
+                                processJumpingJacks(poses);
                             } else if (window.activeExercise === 'hold') {
                                 processHold(poses);
                             } else if (window.activeExercise && window.activeExercise.startsWith('accessory')) {
@@ -638,7 +785,15 @@ const WorkoutTrackingScreen = () => {
 
                     <TouchableOpacity
                         style={styles.openButton}
-                        onPress={() => setIsCameraActive(true)}
+                        onPress={async () => {
+                            const { status } = await ExpoCamera.requestCameraPermissionsAsync();
+                            if (status === 'granted') {
+                                setHasPermission(true);
+                                setIsCameraActive(true);
+                            } else {
+                                alert("Camera access is needed for AI form tracking.");
+                            }
+                        }}
                         activeOpacity={0.8}
                     >
                         <Text style={styles.openButtonText}>Open Live Tracker</Text>
@@ -744,6 +899,7 @@ const WorkoutTrackingScreen = () => {
                     mediaPlaybackRequiresUserAction={false}
                     allowsInlineMediaPlayback={true}
                     mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
+                    allowFileAccess={true}
                     onMessage={handleWebViewMessage}
                     injectedJavaScript={`
                         ${INJECTED_JAVASCRIPT}
@@ -753,6 +909,10 @@ const WorkoutTrackingScreen = () => {
                     onLoadEnd={() => {
                         // Kick off the camera once the basic HTML shell is loaded
                         webViewRef.current?.injectJavaScript("startCamera(); true;");
+                    }}
+                    onError={(syntheticEvent) => {
+                        const { nativeEvent } = syntheticEvent;
+                        console.warn('WebView error:', nativeEvent);
                     }}
                 />
 
