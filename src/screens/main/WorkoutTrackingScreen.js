@@ -225,9 +225,10 @@ const WorkoutTrackingScreen = () => {
                         const ratio = shoulderWidth / bodyHeight;
                         postMessageToRN('DEBUG', { message: 'Orientation Debug - Ratio: ' + ratio.toFixed(2) + ', S-Width: ' + shoulderWidth.toFixed(2) + ', B-Height: ' + bodyHeight.toFixed(2) });
                         
-                        // Ratio > 0.55 represents a diagonal/front-facing stance.
-                        // Lowered from 0.8 for better accuracy while remaining lenient.
-                        return ratio < 0.55; 
+                        // For a front-facing person, shoulder width is ~20-25% of body height (ratio ~0.25).
+                        // For a side-profile person, shoulder width is much smaller (ratio < 0.12).
+                        // We use 0.18 as the threshold.
+                        return ratio < 0.18; 
                     }
                     
                     // Fallback: If ankles aren't visible, normalize shoulder width using the video's actual width
@@ -377,10 +378,25 @@ const WorkoutTrackingScreen = () => {
 
              // --- SQUAT LOGIC (Hip, Knee, Ankle) ---
             function processSquats(poses) {
+                // --- ORIENTATION GUARD ---
+                // We perform this first because if they face forward, getBestSide often fails 
+                // to find a 'good' side since knee angles are occluded.
+                const isValidOrientation = checkOrientation(poses);
+                if (!isValidOrientation) {
+                    postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways so I can see depth!' });
+                    window.hadOrientationWarning = true;
+                    return; // Halt rep processing until turned
+                } else if (window.hadOrientationWarning) {
+                    // Clear warning immediately once they turn
+                    postMessageToRN('FEEDBACK', { message: '✅ Perfect side profile. Start squatting.' });
+                    window.hadOrientationWarning = false;
+                }
+
                 const side = getBestSide(poses, ['hip', 'knee', 'ankle']);
 
                 if (side) {
                     const [hip, knee, ankle] = side;
+
                     const angle = calculateAngle(hip, knee, ankle);
                     window.currentAngle = angle;
                     
@@ -409,83 +425,399 @@ const WorkoutTrackingScreen = () => {
                         }
                     }
                 } else {
-                    postMessageToRN('FEEDBACK', { message: 'Ensure your full leg is visible' });
+                    // Only show this if orientation is correct, but joints are occluded/off-screen
+                    if (!window.hadOrientationWarning) {
+                         postMessageToRN('FEEDBACK', { message: 'Ensure your full leg is visible' });
+                    }
                 }
             }
 
-            // --- PRESS LOGIC (Push-ups, Bench Press, Shoulder Press) ---
-            // Tracks Elbow Angle (Shoulder, Elbow, Wrist)
-            function processPress(poses) {
+            // --- PUSH-UP LOGIC (Shoulder, Elbow, Wrist) ---
+            function processPushups(poses) {
                 const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
 
                 if (side) {
                     const [shoulder, elbow, wrist] = side;
+
+                    // --- ORIENTATION GUARD ---
+                    // Pushups require a side profile to see the elbow angle clearly
+                    const isValidOrientation = checkOrientation(poses);
+                    if (!isValidOrientation) {
+                        postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways so I can see your form!' });
+                        window.hadOrientationWarning = true;
+                        return;
+                    } else if (window.hadOrientationWarning) {
+                        postMessageToRN('FEEDBACK', { message: '✅ Perfect profile. Start pushing!' });
+                        window.hadOrientationWarning = false;
+                    }
+
                     const angle = calculateAngle(shoulder, elbow, wrist);
-                    window.currentAngle = angle;
+                    if (!window.minAngleReached) window.minAngleReached = 180;
                     
-                    // Down phase (eccentric press)
+                    // Locked out -> Up phase
                     if (window.currentPhase === 'down' && angle > 150) {
                         if (window.minAngleReached < 130 && !window.repCooldown) {
                             window.repCooldown = true;
-                            // Arms fully extended up. Was it a complete press?
+                            // Check depth
                             if (window.minAngleReached < 70) {
-                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Full lockout! Great press.' });
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Perfect depth! Full extension.' });
                             } else {
-                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Push all the way up!' });
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Lower your chest more for full range!' });
                             }
                             setTimeout(() => { window.repCooldown = false; }, 1000);
                         }
-                        window.currentPhase = 'up'; // 'up' means extended here
-                        window.minAngleReached = 180; // Reset for next rep
-                        postMessageToRN('FEEDBACK', { message: 'Extending arm...' });
+                        window.currentPhase = 'up'; 
+                        window.minAngleReached = 180; 
+                        postMessageToRN('FEEDBACK', { message: 'Straighten arms...' });
                     } else if (window.currentPhase === 'up' && angle < 130) {
-                        window.currentPhase = 'down'; // 'down' means contracted
-                        postMessageToRN('FEEDBACK', { message: 'Lowering weight...' });
+                        window.currentPhase = 'down';
+                        postMessageToRN('FEEDBACK', { message: 'Lowering chest...' });
                     }
                     
                     if (window.currentPhase === 'down') {
                         if (angle < window.minAngleReached) window.minAngleReached = angle;
                     }
                 } else {
-                    postMessageToRN('FEEDBACK', { message: 'Ensure your arm is fully visible' });
+                    if (!window.hadOrientationWarning) postMessageToRN('FEEDBACK', { message: 'Ensure your arm is visible' });
                 }
             }
 
-            // --- PULL LOGIC (Rows, Pulldowns) ---
-            // Inverted Press Logic (Max Contraction at low angle)
-            function processPull(poses) {
+            // --- KNEE PUSH-UP LOGIC (Shoulder, Elbow, Wrist) ---
+            function processKneePushups(poses) {
+                // Logic is similar to pushups but we might adjust thresholds if needed
+                processPushups(poses);
+            }
+
+            // --- BARBELL BENCH PRESS LOGIC (Shoulder, Elbow, Wrist) ---
+            function processBarbellBench(poses) {
                 const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
 
                 if (side) {
                     const [shoulder, elbow, wrist] = side;
+
+                    // --- ORIENTATION GUARD ---
+                    const isValidOrientation = checkOrientation(poses);
+                    if (!isValidOrientation) {
+                        postMessageToRN('FEEDBACK', { message: '⚠️ Side profile is best for bench press!' });
+                        window.hadOrientationWarning = true;
+                        return;
+                    } else if (window.hadOrientationWarning) {
+                        postMessageToRN('FEEDBACK', { message: '✅ Ready. Start the press!' });
+                        window.hadOrientationWarning = false;
+                    }
+
                     const angle = calculateAngle(shoulder, elbow, wrist);
-                    window.currentAngle = angle;
+                    if (!window.minAngleReached) window.minAngleReached = 180;
                     
-                    // Out phase (eccentric pull/stretch)
-                    if (window.currentPhase === 'up' && angle > 150) { // Returning to stretch
-                        if (window.minAngleReached < 120 && !window.repCooldown) {
+                    if (window.currentPhase === 'down' && angle > 150) {
+                        if (window.minAngleReached < 130 && !window.repCooldown) {
                             window.repCooldown = true;
-                            // Arm fully extended (row completed)
-                            if (window.minAngleReached < 80) {
-                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Strong pull! Good stretch.' });
+                            if (window.minAngleReached < 75) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Great depth! Full lockout.' });
                             } else {
-                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Pull further back.' });
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Bring the bar closer to your chest!' });
                             }
                             setTimeout(() => { window.repCooldown = false; }, 1000);
                         }
-                        window.currentPhase = 'down'; // 'down' means stretched
-                        window.minAngleReached = 180; // Reset
-                        postMessageToRN('FEEDBACK', { message: 'Stretching out...' });
-                    } else if (window.currentPhase === 'down' && angle < 120) { // Starting pull
-                        window.currentPhase = 'up'; // 'up' means contracted here
-                        postMessageToRN('FEEDBACK', { message: 'Pulling back...' });
+                        window.currentPhase = 'up'; 
+                        window.minAngleReached = 180; 
+                        postMessageToRN('FEEDBACK', { message: 'Pushing up...' });
+                    } else if (window.currentPhase === 'up' && angle < 130) {
+                        window.currentPhase = 'down';
+                        postMessageToRN('FEEDBACK', { message: 'Lowering bar...' });
                     }
                     
-                    if (window.currentPhase === 'up') { // During contraction phase
+                    if (window.currentPhase === 'down') {
                         if (angle < window.minAngleReached) window.minAngleReached = angle;
                     }
                 } else {
-                    postMessageToRN('FEEDBACK', { message: 'Ensure your arm is fully visible' });
+                    if (!window.hadOrientationWarning) postMessageToRN('FEEDBACK', { message: 'Ensure your side is visible to the camera' });
+                }
+            }
+
+            // --- DUMBBELL BENCH PRESS LOGIC ---
+            function processDumbbellBench(poses) {
+                // Logic is very similar to barbell bench
+                processBarbellBench(poses);
+            }
+
+            // --- INCLINE DUMBBELL PRESS LOGIC ---
+            function processInclineBench(poses) {
+                const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
+
+                if (side) {
+                    const [shoulder, elbow, wrist] = side;
+
+                    // --- ORIENTATION GUARD ---
+                    const isValidOrientation = checkOrientation(poses);
+                    if (!isValidOrientation) {
+                        postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways for incline press tracking!' });
+                        window.hadOrientationWarning = true;
+                        return;
+                    } else if (window.hadOrientationWarning) {
+                        postMessageToRN('FEEDBACK', { message: '✅ Perfect profile. Start pressing.' });
+                        window.hadOrientationWarning = false;
+                    }
+
+                    const angle = calculateAngle(shoulder, elbow, wrist);
+                    if (!window.minAngleReached) window.minAngleReached = 180;
+                    
+                    if (window.currentPhase === 'down' && angle > 155) {
+                        if (window.minAngleReached < 130 && !window.repCooldown) {
+                            window.repCooldown = true;
+                            if (window.minAngleReached < 85) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Solid incline press!' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Press for more depth!' });
+                            }
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
+                        window.currentPhase = 'up'; 
+                        window.minAngleReached = 180; 
+                        postMessageToRN('FEEDBACK', { message: 'Full lockout!' });
+                    } else if (window.currentPhase === 'up' && angle < 125) {
+                        window.currentPhase = 'down';
+                        postMessageToRN('FEEDBACK', { message: 'Lowering...' });
+                    }
+                    
+                    if (window.currentPhase === 'down') {
+                        if (angle < window.minAngleReached) window.minAngleReached = angle;
+                    }
+                } else {
+                    if (!window.hadOrientationWarning) postMessageToRN('FEEDBACK', { message: 'Ensure your side is visible' });
+                }
+            }
+
+            // --- DUMBBELL SHOULDER PRESS LOGIC (Hip, Shoulder, Elbow) ---
+            function processShoulderPress(poses) {
+                const lShoulder = poses[0].keypoints.find(k => k.name === 'left_shoulder');
+                const lHip = poses[0].keypoints.find(k => k.name === 'left_hip');
+                const lElbow = poses[0].keypoints.find(k => k.name === 'left_elbow');
+                const rShoulder = poses[0].keypoints.find(k => k.name === 'right_shoulder');
+                const rHip = poses[0].keypoints.find(k => k.name === 'right_hip');
+                const rElbow = poses[0].keypoints.find(k => k.name === 'right_elbow');
+
+                // --- ORIENTATION GUARD ---
+                // Shoulder press needs a front or diagonal view to track both arms overhead.
+                if (lShoulder?.score < 0.3 || rShoulder?.score < 0.3 || lHip?.score < 0.3 || rHip?.score < 0.3) {
+                    postMessageToRN('FEEDBACK', { message: '⚠️ Face the camera to track shoulder press!' });
+                    window.hadOrientationWarning = true;
+                    return; // Halt rep processing until turned
+                } else if (window.hadOrientationWarning) {
+                    postMessageToRN('FEEDBACK', { message: '✅ Perfect angle. Start pressing.' });
+                    window.hadOrientationWarning = false;
+                }
+
+                // Determine which arm to track based on better visibility
+                let activeSide = null;
+                if (rElbow?.score >= lElbow?.score && rElbow?.score > 0.4) {
+                     activeSide = [rHip, rShoulder, rElbow]; // Angle at shoulder joint
+                } else if (lElbow?.score > 0.4) {
+                     activeSide = [lHip, lShoulder, lElbow];
+                }
+
+                if (activeSide) {
+                    const [hip, shoulder, elbow] = activeSide;
+                    const angle = calculateAngle(hip, shoulder, elbow); // Tracks shoulder abduction
+                    
+                    if (!window.maxAngleReached) window.maxAngleReached = 0;
+                    
+                    // Arms extended up -> Max angle reached this rep
+                    if (angle > window.maxAngleReached) {
+                         window.maxAngleReached = angle;
+                    }
+
+                    // Weights at shoulders -> Down position
+                    if (angle < 60) {
+                        if (window.currentPhase === 'up' && !window.repCooldown) {
+                            window.repCooldown = true;
+                            // Check max extension (arms overhead)
+                            if (window.maxAngleReached > 150) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Great overhead press!' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Extend your arms fully overhead!' });
+                            }
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
+                        window.currentPhase = 'down';
+                        window.maxAngleReached = 0; // Reset
+                        postMessageToRN('FEEDBACK', { message: 'Weights at shoulders...' });
+                    } 
+                    // Pushing up -> Up phase
+                    else if (angle > 90 && window.currentPhase === 'down') {
+                        window.currentPhase = 'up';
+                        postMessageToRN('FEEDBACK', { message: 'Pushing overhead...' });
+                    }
+                    else if (angle >= 60 && angle <= 90) {
+                         postMessageToRN('FEEDBACK', { message: window.currentPhase === 'up' ? 'Reaching up...' : 'Lowering weights...' });
+                    }
+                } else {
+                    if (!window.hadOrientationWarning) postMessageToRN('FEEDBACK', { message: 'Ensure your upper body is visible' });
+                }
+            }
+
+            // --- LAT PULLDOWN LOGIC (Shoulder, Elbow, Wrist) ---
+            function processLatPulldown(poses) {
+                const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
+
+                if (side) {
+                    const [shoulder, elbow, wrist] = side;
+                    
+                    // --- ORIENTATION GUARD ---
+                    const isValidOrientation = checkOrientation(poses);
+                    if (!isValidOrientation) {
+                        postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways for better tracking!' });
+                        window.hadOrientationWarning = true;
+                        return;
+                    } else if (window.hadOrientationWarning) {
+                        postMessageToRN('FEEDBACK', { message: 'Ready. Begin pulldowns!' });
+                        window.hadOrientationWarning = false;
+                    }
+
+                    const angle = calculateAngle(shoulder, elbow, wrist);
+                    
+                    if (!window.minAngleReached) window.minAngleReached = 180;
+                    
+                    if (window.currentPhase === 'up') {
+                        if (angle < window.minAngleReached) window.minAngleReached = angle;
+                    }
+
+                    // Arms extended UP -> Down Phase (Stretch)
+                    if (angle > 140) {
+                        if (window.currentPhase === 'up' && !window.repCooldown) {
+                            window.repCooldown = true;
+                            // Check max contraction (how far pulling down)
+                            if (window.minAngleReached < 70) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Great pull! Full contraction.' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Pull the bar further down to your chest!' });
+                            }
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
+                        window.currentPhase = 'down'; // 'down' means stretched UP
+                        window.minAngleReached = 180; 
+                        postMessageToRN('FEEDBACK', { message: 'Reaching up...' });
+                    } 
+                    // Pulling the bar down -> Up Phase (Contraction)
+                    else if (angle < 110 && window.currentPhase === 'down') {
+                        window.currentPhase = 'up'; // 'up' means pulling down/contracting
+                        postMessageToRN('FEEDBACK', { message: 'Pulling down...' });
+                    }
+                    else if (angle >= 70 && angle <= 110) {
+                         postMessageToRN('FEEDBACK', { message: window.currentPhase === 'up' ? 'Squeezing...' : 'Letting bar up...' });
+                    }
+                } else {
+                    if (!window.hadOrientationWarning) postMessageToRN('FEEDBACK', { message: 'Ensure your arms are visible' });
+                }
+            }
+
+            // --- SEATED CABLE ROW LOGIC (Shoulder, Elbow, Wrist) ---
+            function processCableRows(poses) {
+                const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
+
+                if (side) {
+                    const [shoulder, elbow, wrist] = side;
+
+                    // --- ORIENTATION GUARD ---
+                    const isValidOrientation = checkOrientation(poses);
+                    if (!isValidOrientation) {
+                        postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways to track rows!' });
+                        window.hadOrientationWarning = true;
+                        return;
+                    } else if (window.hadOrientationWarning) {
+                        postMessageToRN('FEEDBACK', { message: '✅ Good angle. Start rowing.' });
+                        window.hadOrientationWarning = false;
+                    }
+
+                    const angle = calculateAngle(shoulder, elbow, wrist);
+                    if (!window.minAngleReached) window.minAngleReached = 180;
+                    
+                    if (window.currentPhase === 'up') {
+                        if (angle < window.minAngleReached) window.minAngleReached = angle;
+                    }
+                    
+                    // Arms extended forward -> Down Phase (Stretch)
+                    if (angle > 150) { 
+                        if (window.currentPhase === 'up' && !window.repCooldown) {
+                            window.repCooldown = true;
+                            // To get a perfect score, elbows bend strongly (< 70)
+                            if (window.minAngleReached < 70) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Perfect rep! Strong squeeze.' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Pull closer to your torso!' });
+                            }
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
+                        window.currentPhase = 'down'; 
+                        window.minAngleReached = 180; 
+                        postMessageToRN('FEEDBACK', { message: 'Stretching forward...' });
+                    } 
+                    // Pulling motion -> Up Phase (Contraction)
+                    else if (angle < 120 && window.currentPhase === 'down') { 
+                        window.currentPhase = 'up'; 
+                        postMessageToRN('FEEDBACK', { message: 'Rowing back...' });
+                    }
+                    else if (angle >= 70 && angle <= 120) {
+                        postMessageToRN('FEEDBACK', { message: window.currentPhase === 'up' ? 'Squeeze back...' : 'Releasing weight...' });
+                    }
+                } else {
+                    if (!window.hadOrientationWarning) postMessageToRN('FEEDBACK', { message: 'Ensure your arm is fully visible' });
+                }
+            }
+
+            // --- DUMBBELL ROW LOGIC (Shoulder, Hip, Elbow) ---
+            function processDumbbellRow(poses) {
+                // Tracking upper arm relative to body instead of just elbow joint
+                const side = getBestSide(poses, ['hip', 'shoulder', 'elbow']);
+
+                if (side) {
+                    const [hip, shoulder, elbow] = side;
+
+                    const isValidOrientation = checkOrientation(poses);
+                    if (!isValidOrientation) {
+                        postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways to track dumbbell rows!' });
+                        window.hadOrientationWarning = true;
+                        return;
+                    } else if (window.hadOrientationWarning) {
+                        postMessageToRN('FEEDBACK', { message: '✅ Good side profile.' });
+                        window.hadOrientationWarning = false;
+                    }
+
+                    // Angle of elbow relative to torso
+                    const angle = calculateAngle(hip, shoulder, elbow);
+                    
+                    if (!window.maxAngleReached) window.maxAngleReached = 0;
+                    
+                    if (window.currentPhase === 'up') {
+                        if (angle > window.maxAngleReached) window.maxAngleReached = angle;
+                    }
+
+                    // Arm hanging down -> Down Phase (Stretch)
+                    if (angle < 30) {
+                        if (window.currentPhase === 'up' && !window.repCooldown) {
+                            window.repCooldown = true;
+                            // Did they row the dumbbell high enough? (past the torso line)
+                            if (window.maxAngleReached > 80) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Perfect row! Great height.' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Row the dumbbell higher!' });
+                            }
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
+                        window.currentPhase = 'down'; 
+                        window.maxAngleReached = 0; // Reset
+                        postMessageToRN('FEEDBACK', { message: 'Arm extended...' });
+                    } 
+                    // Pulling dumbbell up -> Up Phase (Contraction)
+                    else if (angle > 45 && window.currentPhase === 'down') {
+                        window.currentPhase = 'up'; 
+                        postMessageToRN('FEEDBACK', { message: 'Pulling up...' });
+                    }
+                    else if (angle >= 30 && angle <= 80) {
+                         postMessageToRN('FEEDBACK', { message: window.currentPhase === 'up' ? 'Rowing higher...' : 'Lowering dumbbell...' });
+                    }
+                } else {
+                    if (!window.hadOrientationWarning) postMessageToRN('FEEDBACK', { message: 'Ensure your side profile is fully visible' });
                 }
             }
 
@@ -646,17 +978,151 @@ const WorkoutTrackingScreen = () => {
                 }
             }
 
+            // --- TRICEPS PUSHDOWN LOGIC (Shoulder, Elbow, Wrist) ---
+            function processTriceps(poses) {
+                const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
+
+                if (side) {
+                    const [shoulder, elbow, wrist] = side;
+
+                    // --- ORIENTATION GUARD ---
+                    const isValidOrientation = checkOrientation(poses);
+                    if (!isValidOrientation) {
+                        postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways to track triceps!' });
+                        window.hadOrientationWarning = true;
+                        return;
+                    } else if (window.hadOrientationWarning) {
+                        postMessageToRN('FEEDBACK', { message: 'Ready. Begin pushdowns!' });
+                        window.hadOrientationWarning = false;
+                    }
+
+                    const angle = calculateAngle(shoulder, elbow, wrist);
+                    
+                    // Track the widest angle (max extension)
+                    if (angle > window.maxAngleReached) {
+                         window.maxAngleReached = angle;
+                    }
+
+                    // Arm returning up (bending) -> Down Phase (Eccentric)
+                    if (angle < 100) {
+                        if (window.currentPhase === 'up' && !window.repCooldown) {
+                            window.repCooldown = true;
+
+                            // Did they extend fully down?
+                            if (window.maxAngleReached > 165) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Perfect rep! Full extension.' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Push all the way down!' });
+                            }
+
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
+                        window.currentPhase = 'down';
+                        window.maxAngleReached = 0; // Reset for next rep
+                        postMessageToRN('FEEDBACK', { message: 'Pushing down...' });
+                    }
+                    // Arm extending down -> Up Phase (Concentric)
+                    else if (angle > 130 && window.currentPhase === 'down') {
+                        window.currentPhase = 'up'; // 'Up' here means activating the muscle (pushing down)
+                        postMessageToRN('FEEDBACK', { message: 'Extending...' });
+                    }
+                    else if (angle >= 100 && angle <= 130) {
+                        postMessageToRN('FEEDBACK', { message: window.currentPhase === 'up' ? 'Returning weight...' : 'Keep pushing...' });
+                    }
+                } else {
+                    if (!window.hadOrientationWarning) {
+                        postMessageToRN('FEEDBACK', { message: 'Ensure your arm is fully visible' });
+                    }
+                }
+            }
+
+            // --- LATERAL RAISES LOGIC (Hip, Shoulder, Elbow) ---
+            function processLateralRaises(poses) {
+                // For lateral raises, front-facing is actually better to see the abduction angle.
+                const lShoulder = poses[0].keypoints.find(k => k.name === 'left_shoulder');
+                const lHip = poses[0].keypoints.find(k => k.name === 'left_hip');
+                const lElbow = poses[0].keypoints.find(k => k.name === 'left_elbow');
+                const rShoulder = poses[0].keypoints.find(k => k.name === 'right_shoulder');
+                const rHip = poses[0].keypoints.find(k => k.name === 'right_hip');
+                const rElbow = poses[0].keypoints.find(k => k.name === 'right_elbow');
+
+                // --- ORIENTATION GUARD ---
+                // We need to see them from the front/diagonal, not pure side profile.
+                // Pure side profile hides one shoulder/hip entirely.
+                if (lShoulder?.score < 0.3 || rShoulder?.score < 0.3 || lHip?.score < 0.3 || rHip?.score < 0.3) {
+                    postMessageToRN('FEEDBACK', { message: '⚠️ Face the camera to track lateral raises!' });
+                    window.hadOrientationWarning = true;
+                    return; // Halt rep processing until turned
+                } else if (window.hadOrientationWarning) {
+                    postMessageToRN('FEEDBACK', { message: '✅ Perfect angle. Start raising.' });
+                    window.hadOrientationWarning = false;
+                }
+
+                // Determine which arm to track based on better elbow visibility
+                let activeSide = null;
+                if (rElbow?.score >= lElbow?.score && rElbow?.score > 0.4) {
+                     activeSide = [rHip, rShoulder, rElbow]; // Angle at shoulder joint
+                } else if (lElbow?.score > 0.4) {
+                     activeSide = [lHip, lShoulder, lElbow];
+                }
+
+                if (activeSide) {
+                    const [hip, shoulder, elbow] = activeSide;
+                    const angle = calculateAngle(hip, shoulder, elbow); // 0 = arm by side, 90 = arm parallel to floor
+
+                    if (!window.maxAngleReached) window.maxAngleReached = 0;
+
+                    // Track maximum height (widest angle)
+                    if (angle > window.maxAngleReached) {
+                        window.maxAngleReached = angle;
+                    }
+
+                    // Arm by side -> Down Phase
+                    if (angle < 30) {
+                        if (window.currentPhase === 'up' && !window.repCooldown) {
+                            window.repCooldown = true;
+
+                            // Did they raise it enough?
+                            if (window.maxAngleReached > 80) {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'perfect', feedback: 'Perfect rep! Arms parallel to the floor.' });
+                            } else {
+                                postMessageToRN('REP_COMPLETED', { repQuality: 'flawed', feedback: 'Raise arms higher (parallel to floor).' });
+                            }
+
+                            setTimeout(() => { window.repCooldown = false; }, 1000);
+                        }
+                        window.currentPhase = 'down';
+                        window.maxAngleReached = 0; // Reset
+                        postMessageToRN('FEEDBACK', { message: 'Ready for next raise...' });
+                    }
+                    // Arm raising up -> Up Phase
+                    else if (angle > 40 && window.currentPhase === 'down') {
+                        window.currentPhase = 'up';
+                        postMessageToRN('FEEDBACK', { message: 'Raising...' });
+                    }
+                    else if (angle >= 30 && angle <= 40) {
+                        postMessageToRN('FEEDBACK', { message: window.currentPhase === 'up' ? 'Lowering...' : 'Keep raising...' });
+                    }
+
+                } else {
+                    postMessageToRN('FEEDBACK', { message: 'Ensure your upper body is visible for raises' });
+                }
+            }
+
             // --- ACCESSORY LOGIC (Generic) ---
             function processAccessory(poses, type) {
-                // For accessories, fallback to simple bicep curl logic or generic movement tracking
-                // Since this covers leg extensions/crunches, we'll use a generic proxy 
-                // This could be expanded to check specific points for specific accessory types
                 if (type === 'accessory_arm') {
-                    processBicepCurls(poses); // Fallback currently
+                    processBicepCurls(poses); 
+                } else if (type === 'accessory_tricep') {
+                    if (typeof window.maxAngleReached === 'undefined') window.maxAngleReached = 0;
+                    processTriceps(poses);
+                } else if (type === 'accessory_shoulder') {
+                    if (typeof window.maxAngleReached === 'undefined') window.maxAngleReached = 0;
+                    processLateralRaises(poses);
                 } else if (type === 'accessory_leg') {
-                    processSquats(poses); // Use squat logic as a proxy for leg movement
+                    processSquats(poses); 
                 } else if (type === 'accessory_core') {
-                    processHold(poses); // Use hold logic as a proxy for core stability
+                    processHold(poses); 
                 } else {
                     postMessageToRN('FEEDBACK', { message: 'Accessory exercise: No specific tracking yet.' });
                 }
@@ -691,10 +1157,24 @@ const WorkoutTrackingScreen = () => {
                                 processBicepCurls(poses);
                             } else if (window.activeExercise === 'squat') {
                                 processSquats(poses);
-                            } else if (window.activeExercise === 'press') {
-                                processPress(poses);
-                            } else if (window.activeExercise === 'pull') {
-                                processPull(poses);
+                            } else if (window.activeExercise === 'press_pushup' || window.activeExercise === 'Push-ups') {
+                                processPushups(poses);
+                            } else if (window.activeExercise === 'press_knee_pushup' || window.activeExercise === 'Knee Push-ups') {
+                                processKneePushups(poses);
+                            } else if (window.activeExercise === 'press_barbell_bench' || window.activeExercise === 'Barbell Bench Press') {
+                                processBarbellBench(poses);
+                            } else if (window.activeExercise === 'press_dumbbell_bench' || window.activeExercise === 'Dumbbell Bench Press') {
+                                processDumbbellBench(poses);
+                            } else if (window.activeExercise === 'press_incline_bench' || window.activeExercise === 'Incline Dumbbell Press') {
+                                processInclineBench(poses);
+                            } else if (window.activeExercise === 'press_shoulder' || window.activeExercise === 'Dumbbell Shoulder Press') {
+                                processShoulderPress(poses);
+                            } else if (window.activeExercise === 'pull_lat' || window.activeExercise === 'Lat Pulldowns') {
+                                processLatPulldown(poses);
+                            } else if (window.activeExercise === 'pull_cable' || window.activeExercise === 'Seated Cable Rows') {
+                                processCableRows(poses);
+                            } else if (window.activeExercise === 'pull_dumbbell' || window.activeExercise === 'Dumbbell Rows') {
+                                processDumbbellRow(poses);
                             } else if (window.activeExercise === 'hinge') {
                                 processHinge(poses);
                             } else if (window.activeExercise === 'plank') {
@@ -831,6 +1311,7 @@ const WorkoutTrackingScreen = () => {
             }
             else if (data.type === 'FEEDBACK') {
                 setFeedback(data.message);
+
                 // Trigger large overlay for significant warnings
                 if (data.message.includes('⚠️')) {
                     setShowLargeWarning(true);

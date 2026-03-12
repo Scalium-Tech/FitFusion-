@@ -48,10 +48,10 @@ const WorkoutScreen = () => {
         "Bodyweight Squats": "squat", "Jump Squats": "squat", "Goblet Squats": "squat", "Barbell Squats": "squat",
 
         // Press Variations (Chest & Shoulders)
-        "Push-ups": "press", "Knee Push-ups": "press", "Barbell Bench Press": "press", "Dumbbell Bench Press": "press", "Incline Dumbbell Press": "press", "Dumbbell Shoulder Press": "press",
+        "Push-ups": "press_pushup", "Knee Push-ups": "press_knee_pushup", "Barbell Bench Press": "press_barbell_bench", "Dumbbell Bench Press": "press_dumbbell_bench", "Incline Dumbbell Press": "press_incline_bench", "Dumbbell Shoulder Press": "press_shoulder",
 
         // Pull & Row Variations (Back)
-        "Lat Pulldowns": "pull", "Seated Cable Rows": "pull", "Dumbbell Rows": "pull",
+        "Lat Pulldowns": "pull_lat", "Seated Cable Rows": "pull_cable", "Dumbbell Rows": "pull_dumbbell",
 
         // Hinge Variations (Lower Back & Glutes)
         "Deadlifts": "hinge", "Romanian Deadlifts (RDLs)": "hinge",
@@ -60,7 +60,7 @@ const WorkoutScreen = () => {
         "Planks": "plank", "Side Planks": "plank",
 
         // Accessory/Isolation Variations
-        "Dumbbell Bicep Curls": "accessory_arm", "Triceps Rope Pushdowns": "accessory_arm", "Dumbbell Lateral Raises": "accessory_arm",
+        "Dumbbell Bicep Curls": "accessory_arm", "Triceps Rope Pushdowns": "accessory_tricep", "Dumbbell Lateral Raises": "accessory_shoulder",
         "Leg Extensions": "accessory_leg", "Hamstring Curls": "accessory_leg",
         "Crunches": "accessory_core", "Cable Crunches": "accessory_core", "Bicycle Crunches": "accessory_core", "Mountain Climbers": "accessory_core",
 
