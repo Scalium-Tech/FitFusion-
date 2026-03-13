@@ -105,6 +105,130 @@ const WorkoutScreen = () => {
         "Hamstring Curls": "https://res.cloudinary.com/dzytmknza/video/upload/v1772438430/Hamstring_curls_ursz0t.mp4"
     };
 
+    // Structured guidance for exercises
+    const DETAILED_INSTRUCTIONS = {
+        "Dumbbell Bicep Curls": {
+            setup: "Stand facing the camera or slightly angled. Keep your elbows tucked into your sides.",
+            action: "Lift the weights toward your shoulders while keeping your upper arms stationary.",
+            cue: "Squeeze your biceps at the top and lower the weight slowly. Don't swing your body."
+        },
+        "Triceps Rope Pushdowns": {
+            setup: "Stand at the cable machine. Side profile required.",
+            action: "Push the bar down until your arms are fully straight.",
+            cue: "Keep your elbows 'glued' to your ribs. Only your forearms should move."
+        },
+        "Dumbbell Lateral Raises": {
+            setup: "Stand tall, facing the camera directly.",
+            action: "Raise your arms out to the sides until they are parallel to the floor.",
+            cue: "Lead with your elbows and keep a slight bend in them. Avoid shrugging your shoulders."
+        },
+        "Bodyweight Squats": {
+            setup: "Stand with feet shoulder-width apart, facing sideways to the camera.",
+            action: "Lower your hips as if sitting in a chair until your thighs are parallel to the floor.",
+            cue: "Keep your chest up and weight in your heels. Drive up through your mid-foot."
+        },
+        "Goblet Squats": {
+            setup: "Hold the weight against your chest with both hands. Stand sideways.",
+            action: "Lower your hips until thighs are parallel to the floor, keeping the weight close to your chest.",
+            cue: "Keep your elbows inside your knees at the bottom. Push through your heels."
+        },
+        "Jump Squats": {
+            setup: "Stand sideways with feet shoulder-width apart.",
+            action: "Perform a squat and explode upward from the bottom, jumping off the floor.",
+            cue: "Land softly on the balls of your feet and immediately sink back into the next squat."
+        },
+        "Barbell Squats": {
+            setup: "Position the bar on your upper back. Stand sideways to the camera.",
+            action: "Squat down until your hips are parallel with your knees, then drive back up.",
+            cue: "Brace your core and keep your back flat. Don't let your knees cave inward."
+        },
+        "Forward Lunges": {
+            setup: "Stand tall with feet hip-width apart. Stand sideways.",
+            action: "Step one foot forward and lower your hips until both knees are bent at a 90-degree angle.",
+            cue: "Keep your torso upright and don't let your front knee travel past your toes."
+        },
+        "Reverse Lunges": {
+            setup: "Stand tall with feet hip-width apart. Stand sideways.",
+            action: "Step one foot backward and lower your back knee toward the floor.",
+            cue: "Maintain your balance and keep your front shin vertical throughout the movement."
+        },
+        "Barbell Bench Press": {
+            setup: "Lie flat on the bench. Side or head-on diagonal camera view is best.",
+            action: "Lower the bar to your mid-chest, then drive it back up to full arm extension.",
+            cue: "Keep your feet planted and your back slightly arched. Control the bar on the way down."
+        },
+        "Dumbbell Bench Press": {
+            setup: "Lie on the bench with a dumbbell in each hand. Side profile preferred.",
+            action: "Press the weights upward until your arms are straight. Bring them down to the sides of your chest.",
+            cue: "Touch the dumbbells lightly at the top and focus on stretching the chest at the bottom."
+        },
+        "Incline Dumbbell Press": {
+            setup: "Bench set to a 30-45 degree angle. Side profile required.",
+            action: "Press the weights vertically up from your upper chest.",
+            cue: "Focus on the upper chest. Don't let the weights drift too far forward or back."
+        },
+        "Dumbbell Shoulder Press": {
+            setup: "Sit or stand tall. Side profile is best for the AI to see the elbow-to-shoulder alignment.",
+            action: "Press the weights directly overhead until your elbows lock out.",
+            cue: "Don't arch your lower back. Reach for the ceiling and keep your core braced."
+        },
+        "Lat Pulldowns": {
+            setup: "Sit at the machine. Front or diagonal camera view needed.",
+            action: "Pull the bar down toward your upper chest mientras leaning slightly back.",
+            cue: "Pull with your elbows, not your hands. Squeeze your shoulder blades together at the bottom."
+        },
+        "Seated Cable Rows": {
+            setup: "Sit with feet on platforms. Side profile required.",
+            action: "Pull the handle toward your lower stomach, keeping your back straight.",
+            cue: "Don't lean too far back. Stretch your lats forward, then pull with your back muscles."
+        },
+        "Dumbbell Rows": {
+            setup: "Bend over with one hand on a bench. Side profile required.",
+            action: "Pull the dumbbell up toward your hip, keeping your elbow close to your body.",
+            cue: "Imagine pulling your elbow toward the ceiling. Keep your back flat and parallel to the floor."
+        },
+        "Deadlifts": {
+            setup: "Stand with feet hip-width apart. Camera must see your side profile.",
+            action: "Hinge at your hips and lower the weight along your shins, then stand up tall.",
+            cue: "Push your hips back as far as possible. Keep your back flat and the weight close to your body."
+        },
+        "Romanian Deadlifts (RDLs)": {
+            setup: "Feet hip-width apart. Stand sideways to the camera.",
+            action: "Hinge at the hips, lowering the weight only as far as your hamstrings allow while keeping a flat back.",
+            cue: "Focus on the stretch in your hamstrings. Do not round your lower back."
+        },
+        "Planks": {
+            setup: "Hold a straight line from head to toe. The camera should see your side profile.",
+            action: "Maintain the position without movement, keeping your body parallel to the floor.",
+            cue: "Squeeze your glutes and core. Don't let your hips pike up or sag down."
+        },
+        "Side Planks": {
+            setup: "Lie on your side with feet stacked. Prop yourself up on one elbow. Side profile to camera.",
+            action: "Lift your hips until your body forms a straight line from head to feet.",
+            cue: "Keep your chest open and don't let your hips drop toward the floor."
+        },
+        "High Knees": {
+            setup: "Stand sideways to the camera.",
+            action: "Run in place, driving your knees as high as your waist.",
+            cue: "Land on the balls of your feet and keep a fast, steady pace. Pump your arms."
+        },
+        "Jumping Jacks": {
+            setup: "Face the camera directly.",
+            action: "Jump your feet out wide while bringing your hands together above your head.",
+            cue: "Jump with light feet. Coordinate your arms and legs to move at the same time."
+        },
+        "Push-ups": {
+            setup: "Place hands slightly wider than shoulder-width. Keep your body in a straight line from head to heels. Side profile required.",
+            action: "Lower your body until your chest nearly touches the floor, then push back up.",
+            cue: "Keep your core tight and don't let your hips sag. Keep your neck in a neutral position."
+        },
+        "Knee Push-ups": {
+            setup: "Start on all fours, then walk hands forward until your body is straight from head to knees. Side profile required.",
+            action: "Lower your chest toward the floor, then push back up to the starting position.",
+            cue: "Focus on the chest and arms. Keep your core engaged and avoid arching your back."
+        }
+    };
+
     // expo-video setup
     const player = useVideoPlayer(activeVideoUrl, player => {
         player.loop = true;
@@ -272,7 +396,24 @@ const WorkoutScreen = () => {
                     </View>
                 </View>
                 <View style={styles.instructionContainer}>
-                    <Text style={styles.instructionText}>{exercise.instruction}</Text>
+                    {DETAILED_INSTRUCTIONS[exercise.name] ? (
+                        <View style={styles.detailedInstructionList}>
+                            <View style={styles.instructionRow}>
+                                <Text style={styles.instructionLabel}>Setup: </Text>
+                                <Text style={styles.instructionText}>{DETAILED_INSTRUCTIONS[exercise.name].setup}</Text>
+                            </View>
+                            <View style={styles.instructionRow}>
+                                <Text style={styles.instructionLabel}>Action: </Text>
+                                <Text style={styles.instructionText}>{DETAILED_INSTRUCTIONS[exercise.name].action}</Text>
+                            </View>
+                            <View style={styles.instructionRow}>
+                                <Text style={styles.instructionLabel}>Cue: </Text>
+                                <Text style={styles.instructionText}>"{DETAILED_INSTRUCTIONS[exercise.name].cue}"</Text>
+                            </View>
+                        </View>
+                    ) : (
+                        <Text style={styles.instructionText}>{exercise.instruction}</Text>
+                    )}
                 </View>
             </View>
         );
@@ -670,6 +811,20 @@ const styles = StyleSheet.create({
         fontSize: 14,
         lineHeight: 20,
         color: theme.colors.textMuted,
+        flex: 1,
+    },
+    detailedInstructionList: {
+        gap: 8,
+    },
+    instructionRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    instructionLabel: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: theme.colors.primary,
+        width: 55,
     },
     emptyContainer: {
         flex: 1,

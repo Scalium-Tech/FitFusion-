@@ -824,6 +824,18 @@ const WorkoutTrackingScreen = () => {
             // --- HINGE LOGIC (Deadlifts, RDLs) ---
             // Tracks Hip extension (Shoulder, Hip, Knee)
             function processHinge(poses) {
+                // --- ORIENTATION GUARD ---
+                const isValidOrientation = checkOrientation(poses);
+                if (!isValidOrientation) {
+                    postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways to track deadlifts!' });
+                    window.hadOrientationWarning = true;
+                    return; // Halt rep processing until turned
+                } else if (window.hadOrientationWarning) {
+                    // Clear warning immediately once they turn
+                    postMessageToRN('FEEDBACK', { message: '✅ Good side profile.' });
+                    window.hadOrientationWarning = false;
+                }
+
                 const side = getBestSide(poses, ['shoulder', 'hip', 'knee']);
 
                 if (side) {
@@ -890,6 +902,17 @@ const WorkoutTrackingScreen = () => {
 
             // --- HIGH KNEES LOGIC (Hip, Knee, Ankle) ---
             function processHighKnees(poses) {
+                // --- ORIENTATION GUARD ---
+                const isValidOrientation = checkOrientation(poses);
+                if (!isValidOrientation) {
+                    postMessageToRN('FEEDBACK', { message: '⚠️ Turn sideways for high knees tracking!' });
+                    window.hadOrientationWarning = true;
+                    return; // Halt rep processing until turned
+                } else if (window.hadOrientationWarning) {
+                    postMessageToRN('FEEDBACK', { message: '✅ Side profile detected. Start running!' });
+                    window.hadOrientationWarning = false;
+                }
+
                 const side = getBestSide(poses, ['hip', 'knee', 'ankle']);
                 if (side) {
                     const [hip, knee, ankle] = side;
@@ -1772,32 +1795,35 @@ const styles = StyleSheet.create({
     repContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        width: 60,
-        height: 60,
-        backgroundColor: 'rgba(19, 236, 91, 0.15)',
-        borderRadius: 30,
+        width: 85,
+        height: 110,
+        backgroundColor: 'rgba(19, 236, 91, 0.1)',
+        borderRadius: 12,
         borderWidth: 2,
         borderColor: theme.colors.primary,
         marginRight: 10
     },
     repContainerBad: {
-        backgroundColor: 'rgba(255, 107, 107, 0.15)',
+        backgroundColor: 'rgba(255, 107, 107, 0.1)',
         borderColor: '#FF6B6B',
         marginRight: 15
     },
     repCount: {
         color: theme.colors.primary,
-        fontSize: 22,
+        fontSize: 48,
         fontWeight: '900',
+        lineHeight: 52,
     },
     repCountBad: {
         color: '#FF6B6B',
     },
     repLabel: {
         color: '#FFF',
-        fontSize: 10,
-        fontWeight: '600',
-        marginTop: -2
+        fontSize: 12,
+        fontWeight: 'bold',
+        marginTop: 4,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     feedbackContainer: {
         flex: 1,

@@ -41,6 +41,7 @@ const TrackerScreen = () => {
     const [plan, setPlan] = useState(null);
     const [userData, setUserData] = useState(null);
     const [selectedDayIndex, setSelectedDayIndex] = useState(6); // Default to latest day (today)
+    const [showWeeklySummary, setShowWeeklySummary] = useState(false);
     const [aiInsight, setAiInsight] = useState('');
     const [loadingInsight, setLoadingInsight] = useState(false);
 
@@ -199,57 +200,92 @@ const TrackerScreen = () => {
                     />
                 </View>
 
-                {/* Selected Day Execution Summary */}
+                {/* Selected Day Execution Summary / Weekly Summary */}
                 <View style={styles.selectedDayCard}>
-                    <View style={styles.selectedDayHeader}>
-                        <Calendar size={18} color={theme.colors.primary} />
-                        <Text style={styles.selectedDayTitle}>
-                            Execution Summary: {stats?.labels[selectedDayIndex]}
-                        </Text>
-                    </View>
-
-                    <View style={styles.detailRows}>
-                        <View style={styles.detailRow}>
-                            <View style={styles.detailLabelGroup}>
-                                <Flame size={16} color={stats?.workoutData[selectedDayIndex] === 100 ? theme.colors.primary : theme.colors.textMuted} />
-                                <Text style={styles.detailLabel}>Workout Status</Text>
-                            </View>
-                            <View style={[
-                                styles.statusBadge,
-                                { backgroundColor: stats?.workoutData[selectedDayIndex] === 100 ? 'rgba(19, 236, 91, 0.1)' : 'rgba(255, 255, 255, 0.05)' }
-                            ]}>
-                                <Text style={[
-                                    styles.statusText,
-                                    { color: stats?.workoutData[selectedDayIndex] === 100 ? theme.colors.primary : theme.colors.textMuted }
-                                ]}>
-                                    {stats?.workoutData[selectedDayIndex] === 100 ? 'Completed' : 'Pending'}
-                                </Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.detailRow}>
-                            <View style={styles.detailLabelGroup}>
-                                <Utensils size={16} color={stats?.dietData[selectedDayIndex] >= 66 ? "#ff6b6b" : theme.colors.textMuted} />
-                                <Text style={styles.detailLabel}>Diet Mastery</Text>
-                            </View>
-                            <Text style={[
-                                styles.detailValue,
-                                { color: stats?.dietData[selectedDayIndex] >= 66 ? "#ff6b6b" : theme.colors.text }
-                            ]}>
-                                {stats?.dietData[selectedDayIndex]}%
+                    <TouchableOpacity
+                        style={styles.selectedDayHeader}
+                        onPress={() => setShowWeeklySummary(!showWeeklySummary)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Calendar size={18} color={theme.colors.primary} />
+                            <Text style={styles.selectedDayTitle}>
+                                {showWeeklySummary ? 'Weekly Execution Summary' : `Execution Summary: ${stats?.labels[selectedDayIndex]}`}
                             </Text>
                         </View>
+                        <ChevronRight
+                            size={16}
+                            color={theme.colors.textMuted}
+                            style={{ transform: [{ rotate: showWeeklySummary ? '90deg' : '0deg' }] }}
+                        />
+                    </TouchableOpacity>
 
-                        <View style={styles.detailRow}>
-                            <View style={styles.detailLabelGroup}>
-                                <TrendingUp size={16} color="#409cff" />
-                                <Text style={styles.detailLabel}>Calories In</Text>
+                    {!showWeeklySummary ? (
+                        <View style={styles.detailRows}>
+                            <View style={styles.detailRow}>
+                                <View style={styles.detailLabelGroup}>
+                                    <Flame size={16} color={stats?.workoutData[selectedDayIndex] === 100 ? theme.colors.primary : theme.colors.textMuted} />
+                                    <Text style={styles.detailLabel}>Workout Status</Text>
+                                </View>
+                                <View style={[
+                                    styles.statusBadge,
+                                    { backgroundColor: stats?.workoutData[selectedDayIndex] === 100 ? 'rgba(19, 236, 91, 0.1)' : 'rgba(255, 255, 255, 0.05)' }
+                                ]}>
+                                    <Text style={[
+                                        styles.statusText,
+                                        { color: stats?.workoutData[selectedDayIndex] === 100 ? theme.colors.primary : theme.colors.textMuted }
+                                    ]}>
+                                        {stats?.workoutData[selectedDayIndex] === 100 ? 'Completed' : 'Pending'}
+                                    </Text>
+                                </View>
                             </View>
-                            <Text style={styles.detailValue}>{stats?.caloriesIntake[selectedDayIndex]} kcal</Text>
-                        </View>
-                    </View>
 
-                    {stats?.workoutData[selectedDayIndex] === 100 && (
+                            <View style={styles.detailRow}>
+                                <View style={styles.detailLabelGroup}>
+                                    <Utensils size={16} color={stats?.dietData[selectedDayIndex] >= 66 ? "#ff6b6b" : theme.colors.textMuted} />
+                                    <Text style={styles.detailLabel}>Diet Mastery</Text>
+                                </View>
+                                <Text style={[
+                                    styles.detailValue,
+                                    { color: stats?.dietData[selectedDayIndex] >= 66 ? "#ff6b6b" : theme.colors.text }
+                                ]}>
+                                    {stats?.dietData[selectedDayIndex]}%
+                                </Text>
+                            </View>
+
+                            <View style={styles.detailRow}>
+                                <View style={styles.detailLabelGroup}>
+                                    <TrendingUp size={16} color="#409cff" />
+                                    <Text style={styles.detailLabel}>Calories In</Text>
+                                </View>
+                                <Text style={styles.detailValue}>{stats?.caloriesIntake[selectedDayIndex]} kcal</Text>
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={styles.weeklySummaryList}>
+                            {stats?.labels.map((day, idx) => (
+                                <View key={idx} style={[styles.weeklyRow, idx === stats.labels.length - 1 && { borderBottomWidth: 0 }]}>
+                                    <Text style={styles.weeklyDayName}>{day}</Text>
+                                    <View style={styles.weeklyStatsContainer}>
+                                        <Flame
+                                            size={14}
+                                            color={stats.workoutData[idx] === 100 ? theme.colors.primary : 'rgba(255,255,255,0.1)'}
+                                            style={{ marginRight: 12 }}
+                                        />
+                                        <Text style={[
+                                            styles.weeklyDietValue,
+                                            { color: stats.dietData[idx] >= 66 ? "#ff6b6b" : theme.colors.textMuted }
+                                        ]}>
+                                            {stats.dietData[idx]}%
+                                        </Text>
+                                        <Text style={styles.weeklyCalorieValue}>{stats.caloriesIntake[idx]} kcal</Text>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
+                    {!showWeeklySummary && stats?.workoutData[selectedDayIndex] === 100 && (
                         <View style={styles.burnedEstimation}>
                             <Flame size={14} color={theme.colors.background} />
                             <Text style={styles.burnedText}>
@@ -404,6 +440,7 @@ const styles = StyleSheet.create({
     selectedDayHeader: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: 16,
     },
     selectedDayTitle: {
@@ -411,6 +448,42 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: 'bold',
         marginLeft: 8,
+    },
+    weeklySummaryList: {
+        marginTop: 4,
+    },
+    weeklyRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.05)',
+    },
+    weeklyDayName: {
+        color: theme.colors.text,
+        fontSize: 13,
+        fontWeight: '600',
+        width: 40,
+    },
+    weeklyStatsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    weeklyDietValue: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        width: 45,
+        textAlign: 'right',
+        marginRight: 15,
+    },
+    weeklyCalorieValue: {
+        color: theme.colors.text,
+        fontSize: 12,
+        width: 70,
+        textAlign: 'right',
     },
     detailRows: {
         gap: 12,

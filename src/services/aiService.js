@@ -9,13 +9,13 @@ export const aiService = {
 
         const SUPPORTED_EXERCISES = [
             // Home Upper & Core
-            "Push-ups", "Knee Push-ups", "Planks", "Side Planks", "Crunches", "Bicycle Crunches", "Mountain Climbers",
+            "Push-ups", "Knee Push-ups", "Planks", "Side Planks",
             // Home Lower & Cardio
-            "Bodyweight Squats", "Jump Squats", "Forward Lunges", "Reverse Lunges", "Glute Bridges", "Burpees", "High Knees", "Jumping Jacks",
+            "Bodyweight Squats", "Jump Squats", "Forward Lunges", "Reverse Lunges", "High Knees", "Jumping Jacks",
             // Gym Chest, Back & Shoulders
             "Barbell Bench Press", "Dumbbell Bench Press", "Incline Dumbbell Press", "Lat Pulldowns", "Seated Cable Rows", "Dumbbell Rows", "Dumbbell Shoulder Press", "Dumbbell Lateral Raises",
             // Gym Legs & Arms
-            "Barbell Squats", "Goblet Squats", "Deadlifts", "Romanian Deadlifts (RDLs)", "Leg Press", "Leg Extensions", "Hamstring Curls", "Dumbbell Bicep Curls", "Triceps Rope Pushdowns", "Cable Crunches"
+            "Barbell Squats", "Goblet Squats", "Deadlifts", "Romanian Deadlifts (RDLs)", "Leg Extensions", "Hamstring Curls", "Dumbbell Bicep Curls", "Triceps Rope Pushdowns"
         ];
 
         const executeAttempt = async (attempt) => {
