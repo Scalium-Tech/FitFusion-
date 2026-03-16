@@ -166,6 +166,54 @@ const WorkoutTrackingScreen = () => {
             window.currentPhase = 'down';
             window.minAngleReached = 180;
             window.repCooldown = false;
+            window.shoulderProgress = 0;
+            window.shoulderColor = '#FFFFFF';
+
+            function resetJointColors() {
+                // Static White dots
+                window.jointColors = {};
+                const joints = [
+                    'nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear',
+                    'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
+                    'left_wrist', 'right_wrist', 'left_hip', 'right_hip',
+                    'left_knee', 'right_knee', 'left_ankle', 'right_ankle'
+                ];
+                joints.forEach(j => window.jointColors[j] = '#FFFFFF');
+            }
+            resetJointColors();
+
+            // Progressive helper
+            function drawProgressiveLine(kpStart, kpEnd, progress, color) {
+                if (progress <= 0) return;
+                
+                // Draw white background line first
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.moveTo(kpStart.x, kpStart.y);
+                ctx.lineTo(kpEnd.x, kpEnd.y);
+                ctx.stroke();
+
+                // Draw colored progress line
+                const dx = kpEnd.x - kpStart.x;
+                const dy = kpEnd.y - kpStart.y;
+                const targetX = kpStart.x + dx * progress;
+                const targetY = kpStart.y + dy * progress;
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 10;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(kpStart.x, kpStart.y);
+                ctx.lineTo(targetX, targetY);
+                ctx.stroke();
+                
+                // Add a glow effect
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = color;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
 
             // Wait for React Native to tell us to start
             function startCamera() {
@@ -618,8 +666,14 @@ const WorkoutTrackingScreen = () => {
 
                 if (activeSide) {
                     const [hip, shoulder, elbow] = activeSide;
-                    const angle = calculateAngle(hip, shoulder, elbow); // Tracks shoulder abduction
-                    
+                    const angle = calculateAngle(hip, shoulder, elbow);
+
+                    // Calculate progress for visuals (40deg to 160deg)
+                    const clampedAngle = Math.min(Math.max(angle, 40), 160);
+                    window.shoulderProgress = (clampedAngle - 40) / (160 - 40);
+                    window.shoulderColor = window.shoulderProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = activeSide[1].name.includes('left') ? 'left' : 'right';
+
                     if (!window.maxAngleReached) window.maxAngleReached = 0;
                     
                     // Arms extended up -> Max angle reached this rep
@@ -1240,8 +1294,8 @@ const WorkoutTrackingScreen = () => {
                 const kps = pose.keypoints;
 
                 // 1. Draw glowing lines connecting the joints
-                ctx.strokeStyle = 'rgba(19, 236, 91, 0.7)'; // Match the primary neon green, slightly transparent
-                ctx.lineWidth = 4;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; // White, slightly transparent
+                ctx.lineWidth = 3;
                 
                 SKELETON_CONNECTIONS.forEach(connection => {
                     const partA = connection[0];
@@ -1249,19 +1303,29 @@ const WorkoutTrackingScreen = () => {
                     const kpA = kps.find(k => k.name === partA);
                     const kpB = kps.find(k => k.name === partB);
                     
-                    // Only draw the line if both connected joints are visible (very lenient threshold)
                     if (kpA && kpB && kpA.score > 0.1 && kpB.score > 0.1) {
-                        ctx.beginPath();
-                        ctx.moveTo(kpA.x, kpA.y);
-                        ctx.lineTo(kpB.x, kpB.y);
-                        ctx.stroke();
+                        // Special handling for progressive shoulder press lines
+                        const isShoulderPressLine = (window.activeExercise === 'press_shoulder' || window.activeExercise === 'Dumbbell Shoulder Press') && 
+                                                  ((partA.includes('shoulder') && partB.includes('elbow')) || (partA.includes('elbow') && partB.includes('shoulder'))) &&
+                                                  (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+
+                        if (isShoulderPressLine) {
+                            const shoulderKp = partA.includes('shoulder') ? kpA : kpB;
+                            const elbowKp = partA.includes('elbow') ? kpA : kpB;
+                            drawProgressiveLine(shoulderKp, elbowKp, window.shoulderProgress, window.shoulderColor);
+                        } else {
+                            ctx.beginPath();
+                            ctx.moveTo(kpA.x, kpA.y);
+                            ctx.lineTo(kpB.x, kpB.y);
+                            ctx.stroke();
+                        }
                     }
                 });
                 
                 // 2. Draw dots for high confidence points ON TOP of the lines
                 kps.forEach(kp => {
                     if (kp.score > 0.1) {
-                        ctx.fillStyle = '#13EC5B'; // Solid primary green
+                        ctx.fillStyle = window.jointColors[kp.name] || '#FFFFFF';
                         ctx.beginPath();
                         ctx.arc(kp.x, kp.y, 6, 0, 2 * Math.PI);
                         ctx.fill();
