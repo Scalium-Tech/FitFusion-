@@ -29,7 +29,8 @@ import {
     MessageSquare,
     Utensils,
     Search,
-    Clock
+    Clock,
+    Menu
 } from 'lucide-react-native';
 import { theme } from '../../theme';
 import { storageService } from '../../services/storageService';
@@ -129,13 +130,20 @@ const HomeScreen = ({ navigation }) => {
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <View style={{ flex: 1, paddingRight: 20 }}>
+                    <TouchableOpacity
+                        style={styles.menuButton}
+                        onPress={() => navigation.openDrawer()}
+                    >
+                        <Menu size={24} color={theme.colors.text} />
+                    </TouchableOpacity>
+
+                    <View style={{ flex: 1, paddingLeft: 15 }}>
                         <View style={styles.brandingContainer}>
                             <Text style={styles.brandingText}>FITFUSION AI</Text>
                         </View>
                         <Text style={styles.greetingText}>Hello, <Text style={{ color: theme.colors.primary }}>{displayData.name}!</Text></Text>
-                        <Text style={styles.dateText} numberOfLines={2}>{displayData.greeting}</Text>
                     </View>
+
                     <TouchableOpacity
                         style={styles.profileButton}
                         onPress={() => navigation.navigate('Profile')}
@@ -326,10 +334,19 @@ const styles = StyleSheet.create({
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
         paddingTop: 10,
+    },
+    menuButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
     },
     greetingText: {
         fontSize: 24,

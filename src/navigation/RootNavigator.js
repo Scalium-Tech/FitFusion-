@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabaseClient';
 import { storageService } from '../services/storageService';
 import OnboardingNavigator from './OnboardingNavigator';
-import MainTabNavigator from './MainTabNavigator';
+import MainDrawerNavigator from './MainDrawerNavigator';
 import { theme } from '../theme';
 
 const RootNavigator = () => {
@@ -104,7 +104,7 @@ const RootNavigator = () => {
     return (
         <NavigationContainer>
             {isOnboarded && session ? (
-                <MainTabNavigator />
+                <MainDrawerNavigator />
             ) : (
                 <OnboardingNavigator screenProps={{ setIsOnboarded }} />
             )}

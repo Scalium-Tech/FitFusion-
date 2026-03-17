@@ -723,5 +723,69 @@ export const storageService = {
             console.error('Error getting weekly stats:', error);
             return null;
         }
+    },
+
+    saveFeedback: async (feedbackData) => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) throw new Error('Not authenticated');
+
+            const { error } = await supabase
+                .from('user_feedback')
+                .insert([{
+                    user_id: session.user.id,
+                    rating: feedbackData.rating,
+                    category: feedbackData.category,
+                    areas: feedbackData.areas,
+                    comment: feedbackData.feedback
+                }]);
+
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error('Error saving feedback:', error);
+            throw error;
+        }
+    },
+
+    async saveSupportTicket(ticketData) {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('No authenticated user');
+
+            const { data, error } = await supabase
+                .from('support_tickets')
+                .insert([{
+                    user_id: user.id,
+                    ...ticketData,
+                    status: 'open',
+                    created_at: new Date().toISOString()
+                }]);
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error saving support ticket:', error);
+            throw error;
+        }
+    },
+
+    async getWorkoutReminder() {
+        try {
+            const data = await AsyncStorage.getItem('workout_reminder');
+            return data ? JSON.parse(data) : null;
+        } catch (error) {
+            console.error('Error getting workout reminder:', error);
+            return null;
+        }
+    },
+
+    async saveWorkoutReminder(settings) {
+        try {
+            await AsyncStorage.setItem('workout_reminder', JSON.stringify(settings));
+        } catch (error) {
+            console.error('Error saving workout reminder:', error);
+            throw error;
+        }
     }
 };

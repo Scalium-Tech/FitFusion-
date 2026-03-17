@@ -37,7 +37,8 @@
         {
           "cameraPermission": "FitFusion AI requires camera access to track your workout form."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ]
   }
 }
