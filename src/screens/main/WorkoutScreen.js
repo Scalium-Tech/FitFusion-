@@ -514,7 +514,7 @@ const WorkoutScreen = () => {
                                     <View style={styles.statItem}>
                                         <ListChecks size={14} color="#FFF" />
                                         <Text style={styles.statText}>
-                                            {(currentDayData?.exercises?.filter(ex => !['Leg Press', 'Glute Bridges', 'Leg Extensions', 'Hamstring Curls'].includes(ex.name))?.length || 0)} {isRestDay ? 'Movements' : 'Exercises'}
+                                            {(currentDayData?.exercises?.filter(ex => !['Leg Press', 'Glute Bridges', 'Leg Extensions', 'Hamstring Curls', 'Crunches', 'Cable Crunches', 'Bicycle Crunches', 'Mountain Climbers', 'Burpees', 'Jump Squats'].includes(ex.name))?.length || 0)} {isRestDay ? 'Movements' : 'Exercises'}
                                         </Text>
                                     </View>
                                     <View style={styles.statDivider} />
@@ -531,7 +531,7 @@ const WorkoutScreen = () => {
                         {isRestDay && renderRecoveryAdvice()}
 
                         <Text style={styles.sectionTitle}>{isRestDay ? 'Recovery Routine' : 'Exercise List'}</Text>
-                        {currentDayData?.exercises?.filter(ex => !['Leg Press', 'Glute Bridges', 'Leg Extensions', 'Hamstring Curls'].includes(ex.name)).map(renderExercise)}
+                        {currentDayData?.exercises?.filter(ex => !['Leg Press', 'Glute Bridges', 'Leg Extensions', 'Hamstring Curls', 'Crunches', 'Cable Crunches', 'Bicycle Crunches', 'Mountain Climbers', 'Burpees', 'Jump Squats'].includes(ex.name)).map(renderExercise)}
                     </View>
                 )}
                 <View style={{ height: 100 }} />

@@ -114,6 +114,14 @@ const WorkoutTrackingScreen = () => {
         }
     }, [route.params?.autoStartExercise]);
 
+    // Sync active exercise with WebView when it changes
+    useEffect(() => {
+        if (isTrackerReady && webViewRef.current) {
+            const syncMsg = JSON.stringify({ type: 'SET_EXERCISE', exerciseId: activeExercise });
+            webViewRef.current.postMessage(syncMsg);
+        }
+    }, [activeExercise, isTrackerReady]);
+
     // Generic math function to calculate geometric angle between 3 points
     const calculateAngle = (a, b, c) => {
         const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
@@ -168,6 +176,25 @@ const WorkoutTrackingScreen = () => {
             window.repCooldown = false;
             window.shoulderProgress = 0;
             window.shoulderColor = '#FFFFFF';
+            window.bicepProgress = 0;
+            window.bicepColor = '#FFFFFF';
+            window.squatProgress = 0;
+            window.squatColor = '#FFFFFF';
+            window.tricepProgress = 0;
+            window.tricepColor = '#FFFFFF';
+            window.highKneesProgress = 0;
+            window.highKneesColor = '#FFFFFF';
+            window.latProgress = 0;
+            window.latColor = '#FFFFFF';
+            window.rowProgress = 0;
+            window.rowColor = '#FFFFFF';
+            window.dbRowProgress = 0;
+            window.dbRowColor = '#FFFFFF';
+            window.hingeProgress = 0;
+            window.hingeColor = '#FFFFFF';
+            window.benchProgress = 0;
+            window.benchColor = '#FFFFFF';
+            window.activeSideName = 'left';
 
             function resetJointColors() {
                 // Static White dots
@@ -215,6 +242,32 @@ const WorkoutTrackingScreen = () => {
                 ctx.shadowBlur = 0;
             }
 
+            // --- EXERCISE STATE SYNC ---
+            window.addEventListener('message', function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'SET_EXERCISE') {
+                        window.activeExercise = data.exerciseId;
+                        console.log("WebView: Exercise switched to", data.exerciseId);
+                        
+                        // Reset progress states on switch
+                        window.bicepProgress = 0;
+                        window.shoulderProgress = 0;
+                        window.squatProgress = 0;
+                        window.tricepProgress = 0;
+                        window.highKneesProgress = 0;
+                        window.latProgress = 0;
+                        window.rowProgress = 0;
+                        window.dbRowProgress = 0;
+                        window.hingeProgress = 0;
+                        window.benchProgress = 0;
+                        window.currentPhase = 'down';
+                        window.minAngleReached = 180;
+                        window.maxAngleReached = 0;
+                    }
+                } catch(e) {}
+            });
+
             // Wait for React Native to tell us to start
             function startCamera() {
                 initEngine();
@@ -246,8 +299,8 @@ const WorkoutTrackingScreen = () => {
                 const rScore = right.reduce((sum, p) => sum + (p?.score || 0), 0) / right.length;
                 const lScore = left.reduce((sum, p) => sum + (p?.score || 0), 0) / left.length;
 
-                const rValid = right.every(p => p?.score > 0.4);
-                const lValid = left.every(p => p?.score > 0.4);
+                const rValid = right.every(p => p?.score > 0.25);
+                const lValid = left.every(p => p?.score > 0.25);
 
                 if (rValid && lValid) return rScore >= lScore ? right : left;
                 if (rValid) return right;
@@ -380,6 +433,13 @@ const WorkoutTrackingScreen = () => {
                     const angle = calculateAngle(shoulder, elbow, wrist);
                     postMessageToRN('DEBUG', { message: 'Bicep Angle: ' + Math.round(angle) });
                     
+                    // --- PROGRESSIVE FEEDBACK ---
+                    // Range: 160 (bottom) to 40 (top)
+                    const bicepClamped = Math.min(Math.max(angle, 40), 160);
+                    window.bicepProgress = (160 - bicepClamped) / (160 - 40); // 0 at 160deg, 1 at 40deg
+                    window.bicepColor = window.bicepProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = side[1].name.includes('left') ? 'left' : 'right';
+
                     // Track the tightest angle (how far they curled up)
                     if (angle < window.minAngleReached) window.minAngleReached = angle;
 
@@ -447,6 +507,13 @@ const WorkoutTrackingScreen = () => {
 
                     const angle = calculateAngle(hip, knee, ankle);
                     window.currentAngle = angle;
+
+                    // --- PROGRESSIVE FEEDBACK ---
+                    // Range: 170 (standing) to 100 (target depth)
+                    const squatClamped = Math.min(Math.max(angle, 100), 170);
+                    window.squatProgress = (170 - squatClamped) / (170 - 100); // 0 at 170deg, 1 at 100deg
+                    window.squatColor = window.squatProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = side[1].name.includes('left') ? 'left' : 'right';
                     
                     if (window.currentPhase === 'down' && angle > 160) {
                         if (window.minAngleReached < 140 && !window.repCooldown) {
@@ -555,6 +622,14 @@ const WorkoutTrackingScreen = () => {
                     }
 
                     const angle = calculateAngle(shoulder, elbow, wrist);
+                    
+                    // --- PROGRESSIVE FEEDBACK ---
+                    // Range: 150 (lockout) down to 75 (target depth)
+                    const benchClamped = Math.min(Math.max(angle, 75), 150);
+                    window.benchProgress = (150 - benchClamped) / (150 - 75); // 0 at 150deg, 1 at 75deg
+                    window.benchColor = window.benchProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = side[1].name.includes('left') ? 'left' : 'right';
+
                     if (!window.minAngleReached) window.minAngleReached = 180;
                     
                     if (window.currentPhase === 'down' && angle > 150) {
@@ -730,6 +805,13 @@ const WorkoutTrackingScreen = () => {
 
                     const angle = calculateAngle(shoulder, elbow, wrist);
                     
+                    // --- PROGRESSIVE FEEDBACK ---
+                    // Range: 140 (top/stretched) to 70 (bottom/contracted)
+                    const latClamped = Math.min(Math.max(angle, 70), 140);
+                    window.latProgress = (140 - latClamped) / (140 - 70); // 0 at 140deg, 1 at 70deg
+                    window.latColor = window.latProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = side[1].name.includes('left') ? 'left' : 'right';
+                    
                     if (!window.minAngleReached) window.minAngleReached = 180;
                     
                     if (window.currentPhase === 'up') {
@@ -765,7 +847,6 @@ const WorkoutTrackingScreen = () => {
                 }
             }
 
-            // --- SEATED CABLE ROW LOGIC (Shoulder, Elbow, Wrist) ---
             function processCableRows(poses) {
                 const side = getBestSide(poses, ['shoulder', 'elbow', 'wrist']);
 
@@ -784,6 +865,13 @@ const WorkoutTrackingScreen = () => {
                     }
 
                     const angle = calculateAngle(shoulder, elbow, wrist);
+
+                    // --- PROGRESSIVE FEEDBACK ---
+                    // Range: 150 (stretched forward) to 70 (full contraction/pull back)
+                    const rowClamped = Math.min(Math.max(angle, 70), 150);
+                    window.rowProgress = (150 - rowClamped) / (150 - 70); // 0 at 150deg, 1 at 70deg
+                    window.rowColor = window.rowProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = side[1].name.includes('left') ? 'left' : 'right';
                     if (!window.minAngleReached) window.minAngleReached = 180;
                     
                     if (window.currentPhase === 'up') {
@@ -840,6 +928,13 @@ const WorkoutTrackingScreen = () => {
                     // Angle of elbow relative to torso
                     const angle = calculateAngle(hip, shoulder, elbow);
                     
+                    // --- PROGRESSIVE FEEDBACK ---
+                    // Range: 30 (hanging) to 80 (elbow high)
+                    const dbRowClamped = Math.min(Math.max(angle, 30), 80);
+                    window.dbRowProgress = (dbRowClamped - 30) / (80 - 30); // 0 at 30deg, 1 at 80deg
+                    window.dbRowColor = window.dbRowProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = side[1].name.includes('left') ? 'left' : 'right';
+
                     if (!window.maxAngleReached) window.maxAngleReached = 0;
                     
                     if (window.currentPhase === 'up') {
@@ -895,6 +990,14 @@ const WorkoutTrackingScreen = () => {
                 if (side) {
                     const [shoulder, hip, knee] = side;
                     const angle = calculateAngle(shoulder, hip, knee);
+                    
+                    // --- PROGRESSIVE FEEDBACK ---
+                    // Range: 165 (standing) to 110 (target depth)
+                    const hingeClamped = Math.min(Math.max(angle, 110), 165);
+                    window.hingeProgress = (165 - hingeClamped) / (165 - 110); // 0 at 165deg, 1 at 110deg
+                    window.hingeColor = window.hingeProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = side[1].name.includes('left') ? 'left' : 'right';
+
                     window.currentAngle = angle;
                     
                     if (window.currentPhase === 'down' && angle > 165) { // Standing upright
@@ -979,6 +1082,13 @@ const WorkoutTrackingScreen = () => {
                     }
 
                     const angle = calculateAngle(hip, knee, ankle);
+                    
+                    // --- PROGRESSIVE FEEDBACK ---
+                    // Range: 160 (bottom) to 100 (target height)
+                    const kneeClamped = Math.min(Math.max(angle, 100), 160);
+                    window.highKneesProgress = (160 - kneeClamped) / (160 - 100); // 0 at 160deg, 1 at 100deg
+                    window.highKneesColor = window.highKneesProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = side[1].name.includes('left') ? 'left' : 'right';
                     
                     // Knee high trigger (angle < 100)
                     if (angle < 100 && window.currentPhase === 'down') {
@@ -1075,6 +1185,13 @@ const WorkoutTrackingScreen = () => {
 
                     const angle = calculateAngle(shoulder, elbow, wrist);
                     
+                    // --- PROGRESSIVE FEEDBACK ---
+                    // Range: 100 (bent) to 165 (full extension)
+                    const tricepClamped = Math.min(Math.max(angle, 100), 165);
+                    window.tricepProgress = (tricepClamped - 100) / (165 - 100); // 0 at 100deg, 1 at 165deg
+                    window.tricepColor = window.tricepProgress > 0.9 ? '#13EC5B' : '#FF3B30';
+                    window.activeSideName = side[1].name.includes('left') ? 'left' : 'right';
+
                     // Track the widest angle (max extension)
                     if (angle > window.maxAngleReached) {
                          window.maxAngleReached = angle;
@@ -1308,11 +1425,83 @@ const WorkoutTrackingScreen = () => {
                         const isShoulderPressLine = (window.activeExercise === 'press_shoulder' || window.activeExercise === 'Dumbbell Shoulder Press') && 
                                                   ((partA.includes('shoulder') && partB.includes('elbow')) || (partA.includes('elbow') && partB.includes('shoulder'))) &&
                                                   (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+                        
+                        const isBicepCurlLine = (window.activeExercise === 'bicep_curl' || window.activeExercise === 'Bicep Curls' || window.activeExercise === 'accessory_arm') &&
+                                              ((partA.includes('elbow') && partB.includes('wrist')) || (partA.includes('wrist') && partB.includes('elbow'))) &&
+                                              (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+
+                        const isSquatLine = (window.activeExercise === 'squat' || window.activeExercise === 'Bodyweight Squats' || window.activeExercise === 'accessory_leg') &&
+                                          ((partA.includes('hip') && partB.includes('knee')) || (partA.includes('knee') && partB.includes('hip'))) &&
+                                          (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+
+                        const isTricepLine = (window.activeExercise === 'accessory_tricep') &&
+                                           ((partA.includes('elbow') && partB.includes('wrist')) || (partA.includes('wrist') && partB.includes('elbow'))) &&
+                                           (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+
+                        const isHighKneeLine = (window.activeExercise === 'high_knees') &&
+                                             ((partA.includes('hip') && partB.includes('knee')) || (partA.includes('knee') && partB.includes('hip'))) &&
+                                             (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+
+                        const isLatLine = (window.activeExercise === 'pull_lat' || window.activeExercise === 'Lat Pulldowns') &&
+                                        ((partA.includes('elbow') && partB.includes('wrist')) || (partA.includes('wrist') && partB.includes('elbow'))) &&
+                                        (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+
+                        const isRowLine = (window.activeExercise === 'pull_cable' || window.activeExercise === 'Seated Cable Rows') &&
+                                        ((partA.includes('elbow') && partB.includes('wrist')) || (partA.includes('wrist') && partB.includes('elbow'))) &&
+                                        (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+
+                        const isDbRowLine = (window.activeExercise === 'pull_dumbbell' || window.activeExercise === 'Dumbbell Rows') &&
+                                          ((partA.includes('shoulder') && partB.includes('elbow')) || (partA.includes('elbow') && partB.includes('shoulder'))) &&
+                                          (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+
+                        const isHingeLine = (window.activeExercise === 'hinge') &&
+                                          ((partA.includes('shoulder') && partB.includes('hip')) || (partA.includes('hip') && partB.includes('shoulder'))) &&
+                                          (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
+
+                        const isBenchLine = (window.activeExercise === 'press_barbell_bench' || window.activeExercise === 'press_dumbbell_bench' || window.activeExercise === 'Barbell Bench Press' || window.activeExercise === 'Dumbbell Bench Press') &&
+                                          ((partA.includes('elbow') && partB.includes('wrist')) || (partA.includes('wrist') && partB.includes('elbow'))) &&
+                                          (partA.includes(window.activeSideName) || partB.includes(window.activeSideName));
 
                         if (isShoulderPressLine) {
                             const shoulderKp = partA.includes('shoulder') ? kpA : kpB;
                             const elbowKp = partA.includes('elbow') ? kpA : kpB;
                             drawProgressiveLine(shoulderKp, elbowKp, window.shoulderProgress, window.shoulderColor);
+                        } else if (isBicepCurlLine) {
+                            const elbowKp = partA.includes('elbow') ? kpA : kpB;
+                            const wristKp = partA.includes('wrist') ? kpA : kpB;
+                            drawProgressiveLine(elbowKp, wristKp, window.bicepProgress, window.bicepColor);
+                        } else if (isSquatLine) {
+                            const hipKp = partA.includes('hip') ? kpA : kpB;
+                            const kneeKp = partA.includes('knee') ? kpA : kpB;
+                            drawProgressiveLine(hipKp, kneeKp, window.squatProgress, window.squatColor);
+                        } else if (isTricepLine) {
+                            const elbowKp = partA.includes('elbow') ? kpA : kpB;
+                            const wristKp = partA.includes('wrist') ? kpA : kpB;
+                            drawProgressiveLine(elbowKp, wristKp, window.tricepProgress, window.tricepColor);
+                        } else if (isHighKneeLine) {
+                            const hipKp = partA.includes('hip') ? kpA : kpB;
+                            const kneeKp = partA.includes('knee') ? kpA : kpB;
+                            drawProgressiveLine(hipKp, kneeKp, window.highKneesProgress, window.highKneesColor);
+                        } else if (isLatLine) {
+                            const elbowKp = partA.includes('elbow') ? kpA : kpB;
+                            const wristKp = partA.includes('wrist') ? kpA : kpB;
+                            drawProgressiveLine(elbowKp, wristKp, window.latProgress, window.latColor);
+                        } else if (isRowLine) {
+                            const elbowKp = partA.includes('elbow') ? kpA : kpB;
+                            const wristKp = partA.includes('wrist') ? kpA : kpB;
+                            drawProgressiveLine(elbowKp, wristKp, window.rowProgress, window.rowColor);
+                        } else if (isDbRowLine) {
+                            const shoulderKp = partA.includes('shoulder') ? kpA : kpB;
+                            const elbowKp = partA.includes('elbow') ? kpA : kpB;
+                            drawProgressiveLine(shoulderKp, elbowKp, window.dbRowProgress, window.dbRowColor);
+                        } else if (isHingeLine) {
+                            const shoulderKp = partA.includes('shoulder') ? kpA : kpB;
+                            const hipKp = partA.includes('hip') ? kpA : kpB;
+                            drawProgressiveLine(shoulderKp, hipKp, window.hingeProgress, window.hingeColor);
+                        } else if (isBenchLine) {
+                            const elbowKp = partA.includes('elbow') ? kpA : kpB;
+                            const wristKp = partA.includes('wrist') ? kpA : kpB;
+                            drawProgressiveLine(elbowKp, wristKp, window.benchProgress, window.benchColor);
                         } else {
                             ctx.beginPath();
                             ctx.moveTo(kpA.x, kpA.y);
