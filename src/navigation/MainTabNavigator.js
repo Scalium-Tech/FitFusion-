@@ -14,6 +14,7 @@ import {
 import { theme } from '../theme';
 import HomeScreen from '../screens/main/HomeScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
+import SubscriptionScreen from '../screens/main/SubscriptionScreen';
 import MealScannerScreen from '../screens/main/MealScannerScreen';
 import ChatScreen from '../screens/main/ChatScreen';
 import DietScreen from '../screens/main/DietScreen';
@@ -31,6 +32,7 @@ const HomeStack = () => {
         <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Dashboard" component={HomeScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Subscription" component={SubscriptionScreen} />
             <Stack.Screen name="MealScanner" component={MealScannerScreen} />
         </Stack.Navigator>
     );

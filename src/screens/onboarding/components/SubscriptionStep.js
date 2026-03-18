@@ -6,7 +6,8 @@ import {
     TouchableOpacity,
     Dimensions,
     SafeAreaView,
-    Platform
+    Platform,
+    ScrollView
 } from 'react-native';
 import { CheckCircle2, Clock, X, Dumbbell } from 'lucide-react-native';
 import { theme } from '../../../theme';
@@ -16,86 +17,130 @@ const { width, height } = Dimensions.get('window');
 const SubscriptionStep = ({ onNext, navigation }) => {
     const [selectedPlan, setSelectedPlan] = useState('annual');
 
+    const renderPlanCard = (id, title, subtitle, badgeText, features, isPrimary = false) => {
+        const isSelected = selectedPlan === id;
+
+        return (
+            <TouchableOpacity
+                style={[
+                    styles.planCard,
+                    isSelected && styles.planCardSelected
+                ]}
+                activeOpacity={0.8}
+                onPress={() => setSelectedPlan(id)}
+            >
+                <View style={styles.planHeader}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.planTitle}>{title}</Text>
+                        {subtitle ? <Text style={styles.planSubtitle}>{subtitle}</Text> : null}
+                    </View>
+                    {badgeText ? (
+                        <View style={styles.badgeContainer}>
+                            <Text style={styles.badgeText}>{badgeText}</Text>
+                        </View>
+                    ) : null}
+                </View>
+
+                <View style={styles.featuresListContainer}>
+                    {features.map((feature, index) => {
+                        const Icon = feature.icon;
+                        return (
+                            <View key={index} style={styles.featureItem}>
+                                <Icon size={14} color={isPrimary ? theme.colors.primary : 'rgba(255,255,255,0.6)'} />
+                                <Text style={[
+                                    styles.featureTextSecondary,
+                                    isPrimary && styles.featureTextPrimary
+                                ]}>{feature.text}</Text>
+                            </View>
+                        );
+                    })}
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
+    const premiumFeatures = [
+        { icon: CheckCircle2, text: 'Full AI Workout Personalization' },
+        { icon: CheckCircle2, text: 'Smart Nutrition & Diet Plans' },
+        { icon: CheckCircle2, text: 'Real-time Form Correction' },
+        { icon: CheckCircle2, text: 'Advanced Progress Analytics' },
+        { icon: CheckCircle2, text: '24/7 AI Fitness Coach Access' },
+    ];
+
+    const trialFeatures = [
+        { icon: Dumbbell, text: '3 Days of Full Access' },
+        { icon: Dumbbell, text: 'Try All Premium Features' },
+        { icon: Dumbbell, text: 'No Credit Card Required' },
+    ];
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.softGradientOverlay} />
 
-            <View style={styles.softGradientOverlay} />
-
-            {/* Hero Section */}
-            <View style={styles.heroSection}>
-                <View style={styles.illustrationContainer}>
-                    <View style={styles.glowEffect} />
-                    <View style={styles.iconCircle}>
-                        <Dumbbell size={64} color={theme.colors.primary} strokeWidth={1.5} />
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                {/* Hero Section */}
+                <View style={styles.heroSection}>
+                    <View style={styles.illustrationContainer}>
+                        <View style={styles.glowEffect} />
+                        <View style={styles.iconCircle}>
+                            <Dumbbell size={64} color={theme.colors.primary} strokeWidth={1.5} />
+                        </View>
                     </View>
+                    <Text style={styles.title}>Start Your Fitness Journey</Text>
+                    <Text style={styles.subtitle}>Unlock personalized AI workout and diet plans.</Text>
                 </View>
-                <Text style={styles.title}>Start Your Fitness Journey</Text>
-                <Text style={styles.subtitle}>Unlock personalized AI workout and diet plans.</Text>
-            </View>
 
-            {/* Pricing Options */}
-            <View style={styles.pricingContainer}>
+                {/* Pricing Options */}
+                <View style={styles.pricingContainer}>
 
-                {/* Option 1: Annual */}
-                <TouchableOpacity
-                    style={[
-                        styles.planCard,
-                        selectedPlan === 'annual' && styles.planCardSelected
-                    ]}
-                    activeOpacity={0.8}
-                    onPress={() => setSelectedPlan('annual')}
-                >
-                    <View style={styles.planHeader}>
-                        <View>
-                            <Text style={styles.planTitle}>₹1499 Annual Plan</Text>
-                            <Text style={styles.planSubtitle}>₹125/month • Billed yearly</Text>
-                        </View>
-                        <View style={styles.badgeContainer}>
-                            <Text style={styles.badgeText}>BEST VALUE</Text>
-                        </View>
-                    </View>
-                    <View style={styles.featuresList}>
-                        <CheckCircle2 size={16} color={theme.colors.primary} />
-                        <Text style={styles.featureTextPrimary}>3-Day Free Trial included</Text>
-                    </View>
-                </TouchableOpacity>
+                    {/* Option 1: Annual */}
+                    {renderPlanCard(
+                        'annual',
+                        '₹2 Annual Plan',
+                        '₹0.16/month • Billed yearly',
+                        'BEST VALUE',
+                        premiumFeatures,
+                        true
+                    )}
 
-                {/* Option 2: Monthly */}
-                <TouchableOpacity
-                    style={[
-                        styles.planCard,
-                        selectedPlan === 'monthly' && styles.planCardSelected
-                    ]}
-                    activeOpacity={0.8}
-                    onPress={() => setSelectedPlan('monthly')}
-                >
-                    <View style={styles.planHeader}>
-                        <View>
-                            <Text style={styles.planTitle}>₹199 Monthly Plan</Text>
-                        </View>
-                    </View>
-                    <View style={styles.featuresList}>
-                        <Clock size={16} color={theme.colors.text.secondary} />
-                        <Text style={styles.featureTextSecondary}>3-Day Free Trial</Text>
-                    </View>
-                </TouchableOpacity>
+                    {/* Option 2: Monthly */}
+                    {renderPlanCard(
+                        'monthly',
+                        '₹1 Monthly Plan',
+                        'Billed monthly',
+                        null,
+                        premiumFeatures
+                    )}
 
-            </View>
+                    {/* Option 3: Free Plan */}
+                    {renderPlanCard(
+                        'free',
+                        '3-Day Free Trial',
+                        'Try all features for free',
+                        'NEW',
+                        trialFeatures
+                    )}
 
-            {/* Footer Action */}
-            <View style={styles.footerAction}>
-                <TouchableOpacity
-                    style={styles.ctaButton}
-                    onPress={() => onNext(true, selectedPlan)}
-                >
-                    <Text style={styles.ctaButtonText}>Start Your Free Trial</Text>
-                </TouchableOpacity>
-                <Text style={styles.disclaimerText}>
-                    By tapping 'Start Your Free Trial', you will be charged {selectedPlan === 'annual' ? '₹1499 yearly' : '₹199 monthly'} after 3 days. Cancel anytime in App Store settings.
-                </Text>
-            </View>
+                </View>
 
+                {/* Footer Action */}
+                <View style={styles.footerAction}>
+                    <TouchableOpacity
+                        style={styles.ctaButton}
+                        onPress={() => onNext(selectedPlan !== 'free', selectedPlan)}
+                    >
+                        <Text style={styles.ctaButtonText}>
+                            {selectedPlan === 'free' ? 'Start Your Free Trial' : 'Subscribe Now'}
+                        </Text>
+                    </TouchableOpacity>
+                    <Text style={styles.disclaimerText}>
+                        {selectedPlan === 'free'
+                            ? "By tapping 'Start Your Free Trial', you'll get 3 days of full access. No automatic charges."
+                            : `By tapping 'Subscribe Now', you will be charged ${selectedPlan === 'annual' ? '₹2 yearly' : '₹1 monthly'}. Cancel anytime in App Store settings.`
+                        }
+                    </Text>
+                </View>
+            </ScrollView>
         </SafeAreaView>
     );
 };
@@ -105,23 +150,25 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.background || '#0a0a0a',
     },
+    scrollContent: {
+        paddingBottom: 100,
+    },
     softGradientOverlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(19, 236, 91, 0.05)',
-        // Simulating the CSS radial gradients
         opacity: 0.5,
     },
     heroSection: {
         alignItems: 'center',
         paddingHorizontal: 32,
-        paddingTop: Platform.OS === 'ios' ? 40 : 60,
-        paddingBottom: 40,
+        paddingTop: Platform.OS === 'ios' ? 60 : 80,
+        paddingBottom: 30,
         zIndex: 10,
     },
     illustrationContainer: {
-        width: 140,
-        height: 140,
-        marginBottom: 32,
+        width: 100,
+        height: 100,
+        marginBottom: 40,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -134,7 +181,7 @@ const styles = StyleSheet.create({
     iconCircle: {
         width: '100%',
         height: '100%',
-        borderRadius: 70,
+        borderRadius: 50,
         backgroundColor: 'rgba(19, 236, 91, 0.05)',
         alignItems: 'center',
         justifyContent: 'center',
@@ -142,92 +189,99 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(19, 236, 91, 0.2)',
     },
     title: {
-        fontSize: 28,
+        fontSize: 24,
         fontWeight: 'bold',
         color: '#FFFFFF',
         textAlign: 'center',
-        marginBottom: 12,
-        lineHeight: 34,
+        marginBottom: 8,
+        lineHeight: 30,
     },
     subtitle: {
-        fontSize: 18,
+        fontSize: 16,
         color: 'rgba(255,255,255,0.7)',
         textAlign: 'center',
         paddingHorizontal: 8,
     },
     pricingContainer: {
-        flex: 1,
-        paddingHorizontal: 24,
+        paddingHorizontal: 20,
         gap: 16,
         zIndex: 10,
     },
     planCard: {
-        padding: 20,
+        padding: 16,
         borderRadius: 20,
-        borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.1)',
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(255,255,255,0.03)',
     },
     planCardSelected: {
         borderColor: theme.colors.primary,
-        backgroundColor: 'rgba(19, 236, 91, 0.05)',
+        backgroundColor: 'rgba(19, 236, 91, 0.04)',
+        borderWidth: 2,
     },
     planHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
+        alignItems: 'center',
+        marginBottom: 12,
     },
     planTitle: {
         fontSize: 18,
         fontWeight: 'bold',
         color: '#FFFFFF',
-        marginBottom: 4,
     },
     planSubtitle: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.7)',
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.5)',
+        marginTop: 2,
     },
     badgeContainer: {
         backgroundColor: theme.colors.primary,
         paddingHorizontal: 8,
         paddingVertical: 4,
-        borderRadius: 12,
+        borderRadius: 8,
     },
     badgeText: {
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: 'bold',
         color: '#000000',
         letterSpacing: 0.5,
+        textTransform: 'uppercase',
     },
-    featuresList: {
+    featuresListContainer: {
+        gap: 8,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.05)',
+    },
+    featureItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 12,
-        gap: 8,
+        gap: 10,
     },
     featureTextPrimary: {
-        fontSize: 14,
-        color: theme.colors.primary,
-        fontWeight: '600',
+        fontSize: 13,
+        color: 'rgba(19, 236, 91, 0.9)',
+        fontWeight: '500',
     },
     featureTextSecondary: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.7)',
-        fontWeight: '500',
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.5)',
+        fontWeight: '400',
     },
     footerAction: {
         padding: 24,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+        paddingBottom: Platform.OS === 'ios' ? 60 : 80,
         alignItems: 'center',
         gap: 16,
         zIndex: 10,
     },
     ctaButton: {
         width: '100%',
-        paddingVertical: 20,
+        paddingVertical: 16,
         paddingHorizontal: 32,
         backgroundColor: theme.colors.primary,
-        borderRadius: 30,
+        borderRadius: 16,
         alignItems: 'center',
         shadowColor: theme.colors.primary,
         shadowOffset: { width: 0, height: 4 },
@@ -236,15 +290,15 @@ const styles = StyleSheet.create({
         elevation: 8,
     },
     ctaButtonText: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: 'bold',
         color: '#000000',
     },
     disclaimerText: {
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.5)',
+        fontSize: 11,
+        color: 'rgba(255,255,255,0.4)',
         textAlign: 'center',
-        lineHeight: 18,
+        lineHeight: 16,
         paddingHorizontal: 16,
     }
 });

@@ -75,8 +75,13 @@ const ProfileScreen = ({ navigation }) => {
         );
     };
 
-    const renderCard = (icon, label, value, color) => (
-        <View style={styles.infoCard}>
+    const renderCard = (icon, label, value, color, onPress = null) => (
+        <TouchableOpacity
+            style={styles.infoCard}
+            onPress={onPress}
+            disabled={!onPress}
+            activeOpacity={0.7}
+        >
             <View style={[styles.iconContainer, { backgroundColor: `${color}15` }]}>
                 {React.createElement(icon, { size: 20, color: color })}
             </View>
@@ -84,7 +89,10 @@ const ProfileScreen = ({ navigation }) => {
                 <Text style={styles.cardLabel}>{label}</Text>
                 <Text style={styles.cardValue}>{value || 'Not set'}</Text>
             </View>
-        </View>
+            {onPress && (
+                <ChevronLeft size={16} color={theme.colors.textMuted} style={{ transform: [{ rotate: '180deg' }] }} />
+            )}
+        </TouchableOpacity>
     );
 
     const renderSectionHeader = (title) => (
@@ -190,7 +198,20 @@ const ProfileScreen = ({ navigation }) => {
                 {/* Subscription Details */}
                 {renderSectionHeader('SUBSCRIPTION')}
                 <View style={styles.cardList}>
-                    {renderCard(Crown, 'Current Plan', userData?.is_subscribed ? (userData?.subscription_tier === 'annual' ? 'Annual PRO Plan' : 'Monthly PRO Plan') : 'Free Tier', '#FFD700')}
+                    {renderCard(
+                        Crown,
+                        'Current Plan',
+                        userData?.is_subscribed ? (userData?.subscription_tier === 'annual' ? 'Annual PRO Plan' : 'Monthly PRO Plan') : 'Free Tier',
+                        '#FFD700',
+                        () => navigation.navigate('Subscription')
+                    )}
+                    <TouchableOpacity
+                        style={styles.trialCTA}
+                        onPress={() => navigation.navigate('Subscription')}
+                    >
+                        <Zap size={16} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                        <Text style={styles.trialCTAText}>Change your subscription plan</Text>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Logout Button */}
@@ -404,6 +425,22 @@ const styles = StyleSheet.create({
     logoutText: {
         color: '#FF6B6B',
         fontSize: 16,
+        fontWeight: 'bold',
+    },
+    trialCTA: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(19, 236, 91, 0.1)',
+        paddingVertical: 12,
+        borderRadius: theme.roundness.lg,
+        borderWidth: 1,
+        borderColor: 'rgba(19, 236, 91, 0.2)',
+        marginTop: 4,
+    },
+    trialCTAText: {
+        color: theme.colors.primary,
+        fontSize: 14,
         fontWeight: 'bold',
     },
 });
