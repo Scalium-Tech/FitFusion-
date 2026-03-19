@@ -11,11 +11,57 @@ import {
 } from 'react-native';
 import { CheckCircle2, Clock, X, Dumbbell } from 'lucide-react-native';
 import { theme } from '../../../theme';
+import { paymentService } from '../../../services/paymentService';
+import { supabase } from '../../../services/supabaseClient';
+import { ActivityIndicator, Alert } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
 const SubscriptionStep = ({ onNext, navigation }) => {
     const [selectedPlan, setSelectedPlan] = useState('annual');
+    const [loading, setLoading] = useState(false);
+
+    const handlePress = async () => {
+        if (selectedPlan === 'free') {
+            onNext(false, 'free');
+            return;
+        }
+
+        setLoading(true);
+        const result = await paymentService.startSubscriptionFlow(selectedPlan);
+
+        if (!result.success) {
+            setLoading(false);
+            Alert.alert('Payment Error', result.error || 'Could not start payment flow. Please try again.');
+            return;
+        }
+
+        // The web browser closed. Wait 2 seconds for Razorpay webhook to update Supabase.
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('user_profiles')
+                    .select('is_subscribed, subscription_tier')
+                    .eq('id', user.id)
+                    .single();
+
+                if (profile?.is_subscribed && profile?.subscription_tier === selectedPlan) {
+                    setLoading(false);
+                    Alert.alert('Success', 'Payment completed successfully!');
+                    onNext(true, selectedPlan);
+                    return;
+                }
+            }
+        } catch (err) {
+            console.error('[SubscriptionStep] Error verifying payment:', err);
+        }
+
+        setLoading(false);
+        // If we reach here, the payment likely wasn't completed or they closed the browser manually.
+    };
 
     const renderPlanCard = (id, title, subtitle, badgeText, features, isPrimary = false) => {
         const isSelected = selectedPlan === id;
@@ -126,12 +172,17 @@ const SubscriptionStep = ({ onNext, navigation }) => {
                 {/* Footer Action */}
                 <View style={styles.footerAction}>
                     <TouchableOpacity
-                        style={styles.ctaButton}
-                        onPress={() => onNext(selectedPlan !== 'free', selectedPlan)}
+                        style={[styles.ctaButton, loading && { opacity: 0.7 }]}
+                        onPress={handlePress}
+                        disabled={loading}
                     >
-                        <Text style={styles.ctaButtonText}>
-                            {selectedPlan === 'free' ? 'Start Your Free Trial' : 'Subscribe Now'}
-                        </Text>
+                        {loading ? (
+                            <ActivityIndicator color="#000000" />
+                        ) : (
+                            <Text style={styles.ctaButtonText}>
+                                {selectedPlan === 'free' ? 'Start Your Free Trial' : 'Subscribe Now'}
+                            </Text>
+                        )}
                     </TouchableOpacity>
                     <Text style={styles.disclaimerText}>
                         {selectedPlan === 'free'

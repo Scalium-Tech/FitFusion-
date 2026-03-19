@@ -5,7 +5,11 @@ import SubscriptionStep from '../onboarding/components/SubscriptionStep';
 import { theme } from '../../theme';
 import { storageService } from '../../services/storageService';
 
+import { useFocusEffect } from '@react-navigation/native';
+import { supabase } from '../../services/supabaseClient';
+
 const SubscriptionScreen = ({ navigation }) => {
+    // Removed auto-navigate so users can stay on this screen to view/change plans.
     const handleSubscriptionComplete = async (success, selectedPlan) => {
         try {
             const userData = await storageService.getUserData();
